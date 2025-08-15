@@ -3,67 +3,89 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   Animated,
+  Dimensions,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function Home() {
+const { width, height } = Dimensions.get('window');
+
+export default function ChatMateHome() {
   const router = useRouter();
   
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const logoScaleAnim = useRef(new Animated.Value(0.3)).current;
+  const buttonSlideAnim = useRef(new Animated.Value(100)).current;
 
   useEffect(() => {
-    // Start animations
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
+    // Sequential animations for a smooth entrance
+    Animated.sequence([
+      // Logo animation
+      Animated.parallel([
+        Animated.spring(logoScaleAnim, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
+      // Content slide up
+      Animated.parallel([
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 80,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.spring(buttonSlideAnim, {
+          toValue: 0,
+          tension: 80,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]),
     ]).start();
   }, []);
 
+  const handleEnterPhoneNumber = () => {
+    router.push('/login');
+  };
+
   return (
-    <View style={styles.container}>
-      <StatusBar style="light" backgroundColor="#111B21" translucent={false} />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
       
+      {/* Main Content */}
       <View style={styles.content}>
-        {/* Header Section */}
+        {/* Logo Section */}
         <Animated.View
           style={[
-            styles.header,
+            styles.logoSection,
             {
               opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }],
+              transform: [{ scale: logoScaleAnim }],
             },
           ]}
         >
-          <Image
-            source={{ uri: 'https://img.icons8.com/color/96/000000/chat--v1.png' }}
-            style={styles.logo}
-          />
-          <Text style={styles.appName}>eX-Chat</Text>
-          <View style={styles.divider} />
+          <View style={styles.logoContainer}>
+            <View style={styles.logoCircle}>
+              <Ionicons name="chatbubbles" size={70} color="#FFFFFF" />
+            </View>
+          </View>
         </Animated.View>
 
-        {/* Welcome Section */}
+        {/* Welcome Text Section */}
         <Animated.View
           style={[
             styles.welcomeSection,
@@ -73,36 +95,10 @@ export default function Home() {
             },
           ]}
         >
-          <Text style={styles.welcomeTitle}>Welcome to eX-Chat</Text>
+          <Text style={styles.appName}>ChatMate</Text>
           <Text style={styles.welcomeSubtitle}>
-            Connect with friends and family instantly with secure messaging. 
-            Start your journey with us today.
+            Simple, secure, reliable messaging
           </Text>
-        </Animated.View>
-
-        {/* Action Buttons */}
-        <Animated.View
-          style={[
-            styles.buttonSection,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={() => router.push('/login')}
-          >
-            <Text style={styles.loginButtonText}>GET STARTED</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={styles.skipButton}
-            onPress={() => router.push('/dashboard')}
-          >
-            <Text style={styles.skipButtonText}>Continue as Guest</Text>
-          </TouchableOpacity>
         </Animated.View>
 
         {/* Features Section */}
@@ -111,153 +107,161 @@ export default function Home() {
             styles.featuresSection,
             {
               opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
             },
           ]}
         >
-          <View style={styles.feature}>
-            <Text style={styles.featureIcon}>🔒</Text>
-            <Text style={styles.featureText}>End-to-end encryption</Text>
+          <View style={styles.featureItem}>
+            <Ionicons name="shield-checkmark-outline" size={20} color="#007AFF" />
+            <Text style={styles.featureText}>End-to-end encrypted</Text>
           </View>
-          <View style={styles.feature}>
-            <Text style={styles.featureIcon}>⚡</Text>
-            <Text style={styles.featureText}>Lightning fast messaging</Text>
+          
+          <View style={styles.featureItem}>
+            <Ionicons name="flash-outline" size={20} color="#007AFF" />
+            <Text style={styles.featureText}>Fast and reliable</Text>
           </View>
-          <View style={styles.feature}>
-            <Text style={styles.featureIcon}>🌍</Text>
-            <Text style={styles.featureText}>Connect globally</Text>
+          
+          <View style={styles.featureItem}>
+            <Ionicons name="people-outline" size={20} color="#007AFF" />
+            <Text style={styles.featureText}>Group conversations</Text>
           </View>
-        </Animated.View>
-
-        {/* Footer */}
-        <Animated.View
-          style={[
-            styles.footer,
-            {
-              opacity: fadeAnim,
-            },
-          ]}
-        >
-          <Text style={styles.footerText}>
-            By using eX-Chat, you agree to our Terms of Service and Privacy Policy
-          </Text>
         </Animated.View>
       </View>
-    </View>
+
+      {/* Bottom Section */}
+      <Animated.View
+        style={[
+          styles.bottomSection,
+          {
+            transform: [{ translateY: buttonSlideAnim }],
+          },
+        ]}
+      >
+        {/* Main Action Button */}
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={handleEnterPhoneNumber}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.primaryButtonText}>Get Started</Text>
+          <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+
+        {/* Terms and Privacy */}
+        <Text style={styles.termsText}>
+          By continuing, you agree to our{' '}
+          <Text style={styles.termsLink}>Terms</Text>
+          {' '}and{' '}
+          <Text style={styles.termsLink}>Privacy Policy</Text>
+        </Text>
+      </Animated.View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111B21',
+    backgroundColor: '#FFFFFF',
   },
   content: {
     flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 30,
-    paddingVertical: 50,
-  },
-  header: {
     alignItems: 'center',
-    marginBottom: 50,
+    justifyContent: 'center',
+    paddingHorizontal: 32,
   },
-  logo: {
-    width: 100,
-    height: 100,
-    marginBottom: 20,
-  },
-  appName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 15,
-  },
-  divider: {
-    width: 80,
-    height: 3,
-    backgroundColor: '#00A884',
-    borderRadius: 2,
-  },
-  welcomeSection: {
+  logoSection: {
     alignItems: 'center',
     marginBottom: 60,
   },
-  welcomeTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginBottom: 20,
+  logoContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoCircle: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  welcomeSection: {
+    alignItems: 'center',
+    marginBottom: 80,
+  },
+  appName: {
+    fontSize: 42,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginBottom: 16,
+    letterSpacing: 1.5,
   },
   welcomeSubtitle: {
-    fontSize: 16,
-    color: '#8E8E8F',
-    textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: 10,
-  },
-  buttonSection: {
-    marginBottom: 50,
-  },
-  loginButton: {
-    backgroundColor: '#00A884',
-    borderRadius: 30,
-    padding: 18,
-    alignItems: 'center',
-    marginBottom: 15,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-  },
-  loginButtonText: {
-    color: 'white',
     fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  skipButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: '#374151',
-    borderRadius: 30,
-    padding: 16,
-    alignItems: 'center',
-  },
-  skipButtonText: {
-    color: '#8E8E8F',
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#8E8E93',
+    textAlign: 'center',
+    lineHeight: 26,
+    fontWeight: '400',
   },
   featuresSection: {
+    alignItems: 'center',
+  },
+  featureItem: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 40,
-    paddingHorizontal: 10,
-  },
-  feature: {
     alignItems: 'center',
-    flex: 1,
-  },
-  featureIcon: {
-    fontSize: 24,
-    marginBottom: 8,
-  },
-  featureText: {
-    color: '#8E8E8F',
-    fontSize: 12,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  footer: {
-    alignItems: 'center',
+    marginBottom: 20,
     paddingHorizontal: 20,
   },
-  footerText: {
-    fontSize: 11,
-    color: '#6B7280',
+  featureText: {
+    fontSize: 16,
+    color: '#3A3A3C',
+    fontWeight: '400',
+    marginLeft: 16,
+  },
+  bottomSection: {
+    paddingHorizontal: 32,
+    paddingBottom: 50,
+    alignItems: 'center',
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 16,
+    paddingHorizontal: 40,
+    paddingVertical: 18,
+    width: '100%',
+    maxWidth: 280,
+    marginBottom: 32,
+    shadowColor: '#1C1C1E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    marginRight: 12,
+    letterSpacing: 0.5,
+  },
+  termsText: {
+    fontSize: 13,
+    color: '#8E8E93',
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 20,
+    maxWidth: 280,
+  },
+  termsLink: {
+    color: '#007AFF',
+    fontWeight: '500',
   },
 });

@@ -103,10 +103,10 @@ export default function Splash() {
 
   return (
     <View style={styles.container}>
-      {/* Hide status bar and make it match background */}
+      {/* Status bar matching home page */}
       <StatusBar 
         barStyle="light-content" 
-        backgroundColor="#075E54" 
+        backgroundColor="#111B21" 
         translucent={true}
         hidden={false}
       />
@@ -138,7 +138,7 @@ export default function Splash() {
             source={{ uri: 'https://img.icons8.com/color/96/000000/chat--v1.png' }}
             style={styles.logo}
           />
-          {/* Glow effect */}
+          {/* Glow effect with teal accent */}
           <View style={styles.logoGlow} />
         </Animated.View>
 
@@ -152,7 +152,7 @@ export default function Splash() {
             },
           ]}
         >
-          <Text style={styles.title}>eX-Chat</Text>
+          <Text style={styles.title}>ChatMate</Text>
         </Animated.View>
 
         {/* Subtitle with fade in */}
@@ -195,7 +195,7 @@ const FloatingParticle = ({ delay }: { delay: number }) => {
           }),
           Animated.sequence([
             Animated.timing(opacity, {
-              toValue: 0.6,
+              toValue: 0.4,
               duration: 500,
               useNativeDriver: true,
             }),
@@ -229,10 +229,10 @@ const FloatingParticle = ({ delay }: { delay: number }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#075E54',
+    backgroundColor: '#111B21', // Changed to match home page dark background
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 0, // Remove any padding
+    paddingTop: 0,
   },
   backgroundOverlay: {
     position: 'absolute',
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     left: -100,
     right: -100,
     bottom: -100,
-    backgroundColor: 'rgba(7, 94, 84, 0.3)',
+    backgroundColor: 'rgba(17, 27, 33, 0.3)', // Updated to match new background with transparency
   },
   content: {
     alignItems: 'center',
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     left: -10,
     right: -10,
     bottom: -10,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(0, 168, 132, 0.2)', // Changed to teal accent with transparency
     borderRadius: 70,
     zIndex: -1,
   },
@@ -271,9 +271,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 42,
     fontWeight: '800',
-    color: 'white',
+    color: '#FFFFFF', // Changed to pure white to match home page
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)', // Darker shadow for better contrast
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 4,
     letterSpacing: 2,
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 18,
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: '#8E8E8F', // Changed to match home page secondary text color
     textAlign: 'center',
     fontWeight: '300',
     letterSpacing: 1,
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
   underline: {
     width: 60,
     height: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: '#00A884', // Changed to teal accent color
     borderRadius: 1,
   },
   particlesContainer: {
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 4,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    backgroundColor: 'rgba(0, 168, 132, 0.6)', // Changed to teal accent particles
     borderRadius: 2,
   },
 });
