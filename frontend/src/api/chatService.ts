@@ -1,6 +1,3 @@
-
-
-
 // src/api/chatService.ts
 import { db } from './firebase';
 import {
@@ -13,7 +10,6 @@ import {
   serverTimestamp,
   query,
   orderBy,
-  where,
 } from 'firebase/firestore';
 
 /**
@@ -68,26 +64,5 @@ export const listenForMessages = (
       ...doc.data(),
     }));
     callback(msgs);
-  });
-};
-
-/**
- * Listen for chats in real-time
- */
-
-export const listenForChats = (userId: string, callback: (chats: any[]) => void) => {
-  const chatsRef = collection(db, 'chats');
-  const q = query(
-    chatsRef,
-    where('participants', 'array-contains', userId),
-    orderBy('lastMessageAt', 'desc')
-  );
-
-  return onSnapshot(q, (snapshot) => {
-    const chats = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-    callback(chats);
   });
 };
