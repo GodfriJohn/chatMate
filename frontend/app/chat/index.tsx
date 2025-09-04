@@ -28,25 +28,50 @@ const ChatConversation = () => {
   const currentUser = auth.currentUser;
 
   useEffect(() => {
-    const initChat = async () => {
-      if (!currentUser) return;
-      // For now, hardcode second user
-      const otherUid = 'HARDCODED_USER_ID'; // replace later
-      const cId = await createChat(currentUser.uid, otherUid);
-      setChatId(cId);
+  const initChat = async () => {
+    console.log("initChat started", currentUser?.uid);
+    if (!currentUser) return;
 
-      // Subscribe to Firestore messages
-      const unsubscribe = listenForMessages(cId, setMessages);
-      return unsubscribe;
-    };
-    initChat();
-  }, []);
+    const otherUid = 'HARDCODED_USER_ID';
+    const cId = await createChat(currentUser.uid, otherUid);
+    console.log("Chat created:", cId);
+    setChatId(cId);
+
+    const unsubscribe = listenForMessages(cId, (msgs) => {
+      console.log("🔥 Firestore messages:", msgs);
+      const formatted = msgs.map((m) => ({
+        ...m,
+        createdAt: m.createdAt?.toDate ? m.createdAt.toDate() : null,
+      }));
+      setMessages(formatted);
+    });
+    return unsubscribe;
+  };
+  initChat();
+}, [currentUser]);
+
 
   const handleSendMessage = async () => {
-    if (!chatId || !currentUser) return;
-    await sendMessage(chatId, currentUser.uid, message);
-    setMessage('');
-  };
+  console.log("handleSendMessage called");
+
+  if (!chatId) {
+    console.warn("❌ No chatId, cannot send");
+    return;
+  }
+  if (!currentUser) {
+    console.warn("❌ No currentUser, cannot send");
+    return;
+  }
+  if (!message.trim()) {
+    console.warn("❌ Empty message");
+    return;
+  }
+
+  console.log("Sending message:", message, "chatId:", chatId, "from:", currentUser.uid);
+  await sendMessage(chatId, currentUser.uid, message.trim());
+  setMessage('');
+};
+
 
   return (
     <View style={styles.container}>
@@ -85,8 +110,11 @@ const ChatConversation = () => {
           >
             {messages.map((msg) => {
               const isMe = msg.from === currentUser?.uid;
-              const time = msg.createdAt?.toDate
-                ? msg.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              const time = msg.createdAt
+                ? new Date(msg.createdAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
                 : '';
 
               return (
@@ -220,8 +248,6 @@ const styles = StyleSheet.create({
 });
 
 export default ChatConversation;
-
-
 
 // import React, { useState } from 'react';
 // import {
