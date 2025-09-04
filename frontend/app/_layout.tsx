@@ -4,22 +4,19 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
-
-import { supabase } from '../lib/supabase';
+import { ensureAnonLogin } from "../src/api/authService";
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
-export const AuthContext = createContext<{
-  user: any | null;
-  setUser: React.Dispatch<React.SetStateAction<any | null>>;
-} | null>(null);
+// Context now only needs uid
+export const AuthContext = createContext<{ uid: string | null }>({ uid: null });
 
-// Custom themes with proper dark backgrounds to eliminate white bars
+// Custom themes
 const CustomDefaultTheme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    background: '#111B21', // Dark background for all screens
+    background: '#111B21',
     card: '#111B21',
     text: '#FFFFFF',
     border: '#374151',
@@ -32,7 +29,7 @@ const CustomDarkTheme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    background: '#111B21', // Consistent dark background
+    background: '#111B21',
     card: '#1F2937',
     text: '#FFFFFF',
     border: '#374151',
@@ -47,24 +44,21 @@ export default function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
-  const [user, setUser] = useState<any | null>(null);
+  const [uid, setUid] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
+    (async () => {
+      try {
+        const id = await ensureAnonLogin();
+        console.log("✅ Firebase logged in as:", id);
+        setUid(id);
+      } catch (e) {
+        console.error("Firebase Auth error:", e);
+      }
+    })();
   }, []);
 
   if (!loaded) {
-    // Show dark loading screen instead of null
     return (
       <View style={{ flex: 1, backgroundColor: '#111B21' }}>
         <StatusBar style="light" backgroundColor="#111B21" />
@@ -73,7 +67,7 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthContext.Provider value={{ user, setUser }}>
+    <AuthContext.Provider value={{ uid }}>
       <ThemeProvider value={colorScheme === 'dark' ? CustomDarkTheme : CustomDefaultTheme}>
         <Stack
           screenOptions={{
@@ -82,70 +76,13 @@ export default function RootLayout() {
             animation: 'slide_from_right',
           }}
         >
-          <Stack.Screen 
-            name="index" 
-            options={{ 
-              headerShown: false,
-              statusBarStyle: 'light',
-              statusBarBackgroundColor: '#075E54',
-            }} 
-          />
-          <Stack.Screen 
-            name="splash" 
-            options={{ 
-              headerShown: false,
-              statusBarStyle: 'light',
-              statusBarBackgroundColor: '#075E54',
-            }} 
-          />
-          <Stack.Screen 
-            name="home" 
-            options={{ 
-              headerShown: false,
-              statusBarStyle: 'light',
-              statusBarBackgroundColor: '#111B21',
-            }} 
-          />
-          <Stack.Screen 
-            name="login" 
-            options={{ 
-              headerShown: false,
-              statusBarStyle: 'light',
-              statusBarBackgroundColor: '#111B21',
-            }} 
-          />
-          <Stack.Screen 
-            name="dashboard" 
-            options={{ 
-              title: 'Chats',
-              headerStyle: {
-                backgroundColor: '#111B21',
-              },
-              headerTintColor: '#FFFFFF',
-              headerTitleStyle: {
-                fontWeight: 'bold',
-              },
-              statusBarStyle: 'light',
-              statusBarBackgroundColor: '#111B21',
-            }} 
-          />
-          <Stack.Screen 
-            name="chat/[id]" 
-            options={{ 
-              title: 'Chat',
-              headerStyle: {
-                backgroundColor: '#111B21',
-              },
-              headerTintColor: '#FFFFFF',
-              headerTitleStyle: {
-                fontWeight: 'bold',
-              },
-              statusBarStyle: 'light',
-              statusBarBackgroundColor: '#111B21',
-            }} 
-          />
+          <Stack.Screen name="index" options={{ headerShown: false, statusBarStyle: 'light', statusBarBackgroundColor: '#075E54' }} />
+          <Stack.Screen name="splash" options={{ headerShown: false, statusBarStyle: 'light', statusBarBackgroundColor: '#075E54' }} />
+          <Stack.Screen name="home" options={{ headerShown: false, statusBarStyle: 'light', statusBarBackgroundColor: '#111B21' }} />
+          <Stack.Screen name="login" options={{ headerShown: false, statusBarStyle: 'light', statusBarBackgroundColor: '#111B21' }} />
+          <Stack.Screen name="dashboard" options={{ title: 'Chats', headerStyle: { backgroundColor: '#111B21' }, headerTintColor: '#FFFFFF', headerTitleStyle: { fontWeight: 'bold' }, statusBarStyle: 'light', statusBarBackgroundColor: '#111B21' }} />
+          <Stack.Screen name="chat/[id]" options={{ title: 'Chat', headerStyle: { backgroundColor: '#111B21' }, headerTintColor: '#FFFFFF', headerTitleStyle: { fontWeight: 'bold' }, statusBarStyle: 'light', statusBarBackgroundColor: '#111B21' }} />
         </Stack>
-        {/* Global status bar configuration */}
         <StatusBar style="light" backgroundColor="#111B21" translucent={false} />
       </ThemeProvider>
     </AuthContext.Provider>

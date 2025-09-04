@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import {
   View,
@@ -45,66 +46,7 @@ const ChatInterface = () => {
       unreadCount: 3,
       type: 'individual', // individual person
     },
-    {
-      id: 2,
-      name: 'Zaire Dorwart',
-      message: 'Gacor pisan kang',
-      time: '02:11',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50&h=50&fit=crop&crop=face',
-      hasNotification: false,
-      unreadCount: 0,
-      type: 'individual', // individual person
-    },
-    {
-      id: 3,
-      name: 'Kelas Malam',
-      message: 'Bima : No one can come today?',
-      time: '02:11',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=50&h=50&fit=crop&crop=face',
-      hasNotification: true,
-      unreadCount: 7,
-      type: 'group', // group/community chat
-    },
-    {
-      id: 4,
-      name: 'Jocelyn Gouse',
-      message: "You're now an admin",
-      time: '02:11',
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=50&h=50&fit=crop&crop=face',
-      hasNotification: false,
-      unreadCount: 0,
-      type: 'individual', // individual person
-    },
-    {
-      id: 5,
-      name: 'Jaylon Dias',
-      message: '🎯 Buy back 10k gallons, top up credit, b...',
-      time: '02:11',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=50&h=50&fit=crop&crop=face',
-      hasNotification: false,
-      unreadCount: 0,
-      type: 'individual', // individual person
-    },
-    {
-      id: 6,
-      name: 'Chance Rhiel Madsen',
-      message: 'Thank you mate!',
-      time: '02:11',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=50&h=50&fit=crop&crop=face',
-      hasNotification: true,
-      unreadCount: 1,
-      type: 'individual', // individual person
-    },
-    {
-      id: 7,
-      name: 'Livia Dias',
-      message: 'Hey there! How are you doing today?',
-      time: '02:11',
-      avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=50&h=50&fit=crop&crop=face',
-      hasNotification: false,
-      unreadCount: 0,
-      type: 'individual', // individual person
-    },
+    
   ];
 
   // New Chat Options
