@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 import { ensureAnonLogin } from "../src/api/authService";
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { View } from 'react-native';
+import { initSQLite } from "../src/db/sqlite";   // ✅ import
 
 // Context now only needs uid
 export const AuthContext = createContext<{ uid: string | null }>({ uid: null });
@@ -49,11 +50,16 @@ export default function RootLayout() {
   useEffect(() => {
     (async () => {
       try {
+       // ✅ Initialize SQLite before anything else
+        await initSQLite();
+        console.log("✅ SQLite initialized");
+
+        // ✅ Login to Firebase
         const id = await ensureAnonLogin();
         console.log("✅ Firebase logged in as:", id);
         setUid(id);
       } catch (e) {
-        console.error("Firebase Auth error:", e);
+        console.error("Startup error:", e);
       }
     })();
   }, []);
