@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { auth } from '../../src/api/firebase';
 import { createOrGetChat } from '../../src/api/chatService';
 import {
@@ -18,60 +18,158 @@ const QRScannerScreen = () => {
   const router = useRouter();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const processedQRCodes = useRef(new Set<string>());
+  const lastScanTime = useRef(0);
 
   useEffect(() => {
+    console.log("📷 QRScannerScreen: Component mounted");
     const getCameraPermissions = async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
+      console.log("📷 Camera permission status:", status);
       setHasPermission(status === 'granted');
     };
     getCameraPermissions();
   }, []);
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
-     console.log("📸 QR scanned! Raw data:", data);
+    const currentTime = Date.now();
+    
+    // Prevent processing if already processing or scanned recently (within 2 seconds)
+    if (isProcessing || scanned || (currentTime - lastScanTime.current < 2000)) {
+      console.log("⏸️ Scan ignored - already processing or too recent");
+      return;
+    }
+
+    // Check if this QR code was already processed in this session
+    if (processedQRCodes.current.has(data)) {
+      console.log("⏸️ QR code already processed in this session");
+      return;
+    }
+
+    console.log("🔍 QR Code Scanned!");
+    console.log("📄 Raw QR data:", data);
+    
+    // Immediately set processing state to prevent multiple scans
+    setIsProcessing(true);
     setScanned(true);
+    lastScanTime.current = currentTime;
+    processedQRCodes.current.add(data);
+    
     try {
+      // Parse the QR code data
       const parsed = JSON.parse(data);
-      console.log("✅ Parsed QR:", parsed);
+      console.log("✅ Parsed QR data:", parsed);
 
-      if (parsed.uid) {
-        const me = auth.currentUser?.uid;
-        console.log("👤 Current user:", me, "Scanned UID:", parsed.uid);
-        if (!me) throw new Error('Not logged in');
-        if (parsed.uid === me) throw new Error('You scanned your own QR');
-
-        console.log("💬 Creating or getting chat with:", parsed.uid);
-      const chatId = await createOrGetChat(parsed.uid);
-      console.log("✅ Chat ID created:", chatId);
-
-         Alert.alert("Connected!", "Chat created successfully", [
-        {
-          text: "OK",
-          onPress: () => {
-            console.log("➡️ Navigating to chat with ID:", chatId);
-            router.replace({
-              pathname: "/chat/[id]",
-              params: { id: chatId },
-            });
-          },
-        },
-      ]);
-    } else {
-       console.warn("⚠️ Invalid QR format, missing uid field");
-        throw new Error('Invalid QR format');
+      // Validate the QR code structure
+      if (!parsed.uid) {
+        console.error("❌ QR code missing 'uid' field");
+        throw new Error('Invalid QR format: missing uid');
       }
-    } catch (err: any) {
-       console.error("❌ QR Scan failed:", err);
-      Alert.alert('Scan failed', err.message ?? 'Invalid QR code');
-      setScanned(false);
+
+      // Get current user
+      const currentUser = auth.currentUser;
+      console.log("👤 Current user:", currentUser?.uid);
+
+      if (!currentUser) {
+        console.error("❌ No authenticated user");
+        throw new Error('Not logged in');
+      }
+
+      if (parsed.uid === currentUser.uid) {
+        console.warn("⚠️ User tried to scan their own QR code");
+        throw new Error('You cannot add yourself as a contact');
+      }
+
+      console.log("💬 Creating chat between:", currentUser.uid, "and", parsed.uid);
+      
+      // Create or get existing chat
+      const chatId = await createOrGetChat(parsed.uid);
+      console.log("✅ Chat created/found with ID:", chatId);
+
+      // Show success message
+      const userName = parsed.name || `User ${parsed.uid.slice(-4)}`;
+      Alert.alert(
+        "Contact Added Successfully!",
+        `You can now chat with ${userName}`,
+        [
+          {
+            text: "Start Chatting",
+            onPress: () => {
+              console.log("➡️ Navigating to chat:", chatId);
+              router.replace({
+                pathname: "/chat/[id]",
+                params: { 
+                  id: chatId,
+                  chatName: userName,
+                },
+              });
+            },
+          },
+          {
+            text: "Later",
+            style: "cancel",
+            onPress: () => {
+              console.log("📱 User chose to go back to dashboard");
+              router.replace("/dashboard");
+            },
+          },
+        ]
+      );
+
+    } catch (error: any) {
+      console.error("❌ QR Scan error:", error);
+      
+      // Show user-friendly error message
+      let errorMessage = 'Invalid QR code';
+      if (error.message.includes('Not logged in')) {
+        errorMessage = 'Please log in first';
+      } else if (error.message.includes('add yourself')) {
+        errorMessage = 'You cannot add yourself as a contact';
+      } else if (error.message.includes('Invalid QR format')) {
+        errorMessage = 'This QR code is not from this app';
+      }
+
+      Alert.alert(
+        'Scan Failed',
+        errorMessage,
+        [
+          {
+            text: "Try Again",
+            onPress: () => {
+              console.log("🔄 User chose to try scanning again");
+              resetScanState();
+            },
+          },
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => {
+              console.log("❌ User cancelled scanning");
+              router.back();
+            },
+          },
+        ]
+      );
+    } finally {
+      setIsProcessing(false);
     }
   };
 
+  const resetScanState = () => {
+    setScanned(false);
+    setIsProcessing(false);
+    // Don't clear processedQRCodes to prevent re-scanning the same code
+    // processedQRCodes.current.clear(); // Only clear this if you want to allow re-scanning
+  };
+
   const handleBackPress = () => {
+    console.log("🔙 Back button pressed from QR scanner");
     router.back();
   };
 
   if (hasPermission === null) {
+    console.log("⏳ Waiting for camera permission...");
     return (
       <View style={styles.container}>
         <Text style={styles.permissionText}>Requesting camera permission...</Text>
@@ -80,6 +178,7 @@ const QRScannerScreen = () => {
   }
 
   if (hasPermission === false) {
+    console.log("❌ Camera permission denied");
     return (
       <View style={styles.container}>
         <Text style={styles.permissionText}>No access to camera</Text>
@@ -89,6 +188,8 @@ const QRScannerScreen = () => {
       </View>
     );
   }
+
+  console.log("📷 Rendering camera view");
 
   return (
     <View style={styles.container}>
@@ -112,7 +213,7 @@ const QRScannerScreen = () => {
             barcodeScannerSettings={{
               barcodeTypes: ['qr'],
             }}
-            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+            onBarcodeScanned={(scanned || isProcessing) ? undefined : handleBarCodeScanned}
           />
 
           {/* Overlay */}
@@ -126,18 +227,33 @@ const QRScannerScreen = () => {
                 <View style={[styles.corner, styles.topRight]} />
                 <View style={[styles.corner, styles.bottomLeft]} />
                 <View style={[styles.corner, styles.bottomRight]} />
+                
+                {/* Processing indicator */}
+                {isProcessing && (
+                  <View style={styles.processingOverlay}>
+                    <Text style={styles.processingText}>Processing...</Text>
+                  </View>
+                )}
               </View>
               <View style={styles.overlaySide} />
             </View>
 
             <View style={styles.overlayBottom}>
               <Text style={styles.instructionText}>
-                Position the QR code within the frame
+                {isProcessing 
+                  ? "Processing QR code..." 
+                  : scanned 
+                    ? "QR code scanned successfully!"
+                    : "Position the QR code within the frame"
+                }
               </Text>
-              {scanned && (
+              {(scanned && !isProcessing) && (
                 <TouchableOpacity
                   style={styles.scanAgainButton}
-                  onPress={() => setScanned(false)}
+                  onPress={() => {
+                    console.log("🔄 Scan again button pressed");
+                    resetScanState();
+                  }}
                 >
                   <Text style={styles.scanAgainText}>Tap to Scan Again</Text>
                 </TouchableOpacity>
@@ -241,6 +357,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
+  },
+
+  // Processing overlay
+  processingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 123, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  processingText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 
   // Corners

@@ -19,17 +19,50 @@ const auth = getAuth();
 const chatsCol = collection(db, 'chats');
 const pairKeyOf = (a: string, b: string) => [a, b].sort().join('__');
 
+// In-memory cache to prevent duplicate requests
+const chatCreationCache = new Map<string, Promise<string>>();
+
 export async function createOrGetChat(peerUid: string): Promise<string> {
   const me = auth.currentUser?.uid;
   if (!me) throw new Error('Not signed in');
   if (me === peerUid) throw new Error('Cannot chat with yourself');
 
   const key = pairKeyOf(me, peerUid);
+  console.log("🔑 Chat pair key:", key);
+
+  // Check if we're already creating this chat
+  if (chatCreationCache.has(key)) {
+    console.log("⚠️ Chat creation already in progress, waiting for existing request");
+    return await chatCreationCache.get(key)!;
+  }
+
+  // Create a promise for this chat creation and cache it
+  const chatCreationPromise = createOrGetChatInternal(key, me, peerUid);
+  chatCreationCache.set(key, chatCreationPromise);
+
+  try {
+    const result = await chatCreationPromise;
+    return result;
+  } finally {
+    // Remove from cache after completion (success or failure)
+    setTimeout(() => chatCreationCache.delete(key), 5000); // Keep cache for 5 seconds
+  }
+}
+
+async function createOrGetChatInternal(key: string, me: string, peerUid: string): Promise<string> {
+  console.log("🔍 Searching for existing chat with key:", key);
 
   // 1) Find existing
   const q = query(chatsCol, where('pairKey', '==', key), limit(1));
   const snap = await getDocs(q);
-  if (!snap.empty) return snap.docs[0].id;
+  
+  if (!snap.empty) {
+    const existingChatId = snap.docs[0].id;
+    console.log("✅ Found existing chat:", existingChatId);
+    return existingChatId;
+  }
+
+  console.log("📝 No existing chat found, creating new one");
 
   // 2) Otherwise create
   const docRef = await addDoc(chatsCol, {
@@ -39,12 +72,17 @@ export async function createOrGetChat(peerUid: string): Promise<string> {
     lastUpdated: serverTimestamp(),
     lastMessage: null,
   });
+
+  console.log("✅ New chat created with ID:", docRef.id);
   return docRef.id;
 }
 
 export async function sendMessage(chatId: string, text: string) {
   const me = auth.currentUser?.uid;
   if (!me) return;
+  
+  console.log("📤 Sending message to chat:", chatId, "from:", me);
+  
   const msgsCol = collection(db, 'chats', chatId, 'messages');
   const createdAt = serverTimestamp();
 
@@ -54,32 +92,44 @@ export async function sendMessage(chatId: string, text: string) {
     lastUpdated: serverTimestamp(),
     lastMessage: { from: me, text, createdAt },
   });
+
+  console.log("✅ Message sent successfully");
 }
 
 export function listenForMessages(chatId: string, onUpdate: (messages: any[]) => void) {
+  console.log("👂 Setting up message listener for chat:", chatId);
+  
   const msgsCol = collection(db, 'chats', chatId, 'messages');
   const q = query(msgsCol, orderBy('createdAt', 'asc'));
+  
   return onSnapshot(q, (snap) => {
-    onUpdate(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const messages = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    console.log("📨 Received", messages.length, "messages for chat:", chatId);
+    onUpdate(messages);
   });
 }
 
 export function listenForMyChats(onUpdate: (chats: any[]) => void) {
   const me = auth.currentUser?.uid;
-  if (!me) return () => {};
+  if (!me) {
+    console.warn("⚠️ No authenticated user for chat listener");
+    return () => {};
+  }
+  
+  console.log("👂 Setting up chats listener for user:", me);
+  
   const q = query(
     chatsCol,
     where('participants', 'array-contains', me),
     orderBy('lastUpdated', 'desc')
   );
+  
   return onSnapshot(q, (snap) => {
-    onUpdate(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const chats = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    console.log("💬 Received", chats.length, "chats for user:", me);
+    onUpdate(chats);
   });
 }
-
-
-
-
 
 
 

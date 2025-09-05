@@ -1,11 +1,10 @@
 import QRCode from 'react-native-qrcode-svg';
 import { auth } from '../../src/api/firebase';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   TextInput,
   SafeAreaView,
@@ -22,77 +21,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Camera } from 'expo-camera';
-import { BarCodeScanner } from 'expo-barcode-scanner';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
-
-// Mock contacts data
-const mockContacts = [
-  {
-    id: '1',
-    name: 'Alice Johnson',
-    phone: '+1 (555) 123-4567',
-    avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b47c?w=150&h=150&fit=crop&crop=face',
-    status: 'online',
-    lastSeen: 'online',
-  },
-  {
-    id: '2',
-    name: 'Bob Smith',
-    phone: '+1 (555) 987-6543',
-    avatar: null,
-    status: 'offline',
-    lastSeen: '2 hours ago',
-  },
-  {
-    id: '3',
-    name: 'Charlie Brown',
-    phone: '+1 (555) 456-7890',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
-    status: 'online',
-    lastSeen: 'online',
-  },
-  {
-    id: '4',
-    name: 'Diana Prince',
-    phone: '+1 (555) 321-0987',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
-    status: 'offline',
-    lastSeen: '1 day ago',
-  },
-  {
-    id: '5',
-    name: 'Edward Wilson',
-    phone: '+1 (555) 654-3210',
-    avatar: null,
-    status: 'online',
-    lastSeen: 'online',
-  },
-  {
-    id: '6',
-    name: 'Fiona Davis',
-    phone: '+1 (555) 789-0123',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop&crop=face',
-    status: 'offline',
-    lastSeen: '30 minutes ago',
-  },
-  {
-    id: '7',
-    name: 'George Miller',
-    phone: '+1 (555) 890-1234',
-    avatar: null,
-    status: 'online',
-    lastSeen: 'online',
-  },
-  {
-    id: '8',
-    name: 'Hannah Taylor',
-    phone: '+1 (555) 012-3456',
-    avatar: 'https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=150&h=150&fit=crop&crop=face',
-    status: 'offline',
-    lastSeen: '5 hours ago',
-  },
-];
 
 const ContactsScreen = () => {
   const router = useRouter();
@@ -101,15 +31,30 @@ const ContactsScreen = () => {
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [contactScaleAnim] = useState(new Animated.Value(0));
   const [qrScaleAnim] = useState(new Animated.Value(0));
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // User data for QR generation
+  // Get current user data
+  useEffect(() => {
+    console.log("🔥 ContactsScreen: useEffect triggered");
+    const user = auth.currentUser;
+    if (user) {
+      console.log("✅ Current user found:", user.uid);
+      setCurrentUser(user);
+    } else {
+      console.warn("⚠️ No current user found");
+    }
+  }, []);
+
+  // Generate unique user data based on Firebase user
   const userData = {
-    name: 'John Doe',
-    username: '@johndoe',
-    phone: '+1 (555) 123-4567',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-    
+    uid: currentUser?.uid || 'no-uid',
+    name: currentUser?.displayName || `User ${currentUser?.uid?.slice(-4) || '0000'}`,
+    username: `@user${currentUser?.uid?.slice(-6) || '000000'}`,
+    email: currentUser?.email || 'anonymous@example.com',
+    avatar: currentUser?.photoURL || null,
   };
+
+  console.log("🔍 Generated user data:", userData);
 
   // Helper function to get initials
   const getInitials = (name: string) => {
@@ -131,57 +76,14 @@ const ContactsScreen = () => {
     return colors[index];
   };
 
-  // Filter contacts based on search query
-  const filteredContacts = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return mockContacts;
-    }
-    
-    return mockContacts.filter(contact =>
-      contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      contact.phone.includes(searchQuery)
-    );
-  }, [searchQuery]);
-
-  // Group contacts alphabetically
-  const groupedContacts = useMemo(() => {
-    const groups: { [key: string]: typeof mockContacts } = {};
-    
-    filteredContacts.forEach(contact => {
-      const firstLetter = contact.name.charAt(0).toUpperCase();
-      if (!groups[firstLetter]) {
-        groups[firstLetter] = [];
-      }
-      groups[firstLetter].push(contact);
-    });
-
-    // Sort each group
-    Object.keys(groups).forEach(letter => {
-      groups[letter].sort((a, b) => a.name.localeCompare(b.name));
-    });
-
-    return groups;
-  }, [filteredContacts]);
-
   const handleBackPress = () => {
+    console.log("🔙 Back button pressed");
     router.back();
-  };
-
-  const handleContactPress = (contact: typeof mockContacts[0]) => {
-    // Navigate to chat with this contact
-    router.push({
-      pathname: '/chat',
-      params: {
-        contactId: contact.id,
-        contactName: contact.name,
-        contactAvatar: contact.avatar || '',
-        contactStatus: contact.status,
-      }
-    });
   };
 
   // Show contact options modal
   const handleAddContact = () => {
+    console.log("👥 Add contact button pressed");
     setContactModalVisible(true);
     Animated.spring(contactScaleAnim, {
       toValue: 1,
@@ -193,6 +95,7 @@ const ContactsScreen = () => {
 
   // Close contact modal
   const closeContactModal = () => {
+    console.log("❌ Closing contact modal");
     Animated.timing(contactScaleAnim, {
       toValue: 0,
       duration: 200,
@@ -204,6 +107,7 @@ const ContactsScreen = () => {
 
   // Show QR modal
   const showQrModal = () => {
+    console.log("📱 Showing QR modal");
     closeContactModal();
     setTimeout(() => {
       setQrModalVisible(true);
@@ -218,6 +122,7 @@ const ContactsScreen = () => {
 
   // Close QR modal
   const closeQrModal = () => {
+    console.log("❌ Closing QR modal");
     Animated.timing(qrScaleAnim, {
       toValue: 0,
       duration: 200,
@@ -229,21 +134,26 @@ const ContactsScreen = () => {
 
   // Handle QR scan option
   const handleQRScan = () => {
+    console.log("📷 QR scan option selected");
     showQrModal();
   };
 
   // Handle actual QR scanning
   const handleStartQRScan = async () => {
+    console.log("🎯 Starting QR scan");
     closeQrModal();
     
     try {
       // Request camera permissions
       const { status } = await Camera.requestCameraPermissionsAsync();
+      console.log("📷 Camera permission status:", status);
       
       if (status === 'granted') {
+        console.log("✅ Camera permission granted, navigating to scanner");
         // Navigate to QR scanner screen
         router.push('/qr-scanner');
       } else {
+        console.warn("⚠️ Camera permission denied");
         Alert.alert(
           'Camera Permission Required',
           'Please grant camera permission to scan QR codes.',
@@ -257,13 +167,14 @@ const ContactsScreen = () => {
         );
       }
     } catch (error) {
-      console.log('Error requesting camera permission:', error);
+      console.error("❌ Error requesting camera permission:", error);
       Alert.alert('Error', 'Failed to access camera. Please try again.');
     }
   };
 
   // Handle phone number entry - Open native contacts app directly
   const handlePhoneNumberEntry = async () => {
+    console.log("📞 Phone number entry selected");
     closeContactModal();
     
     try {
@@ -277,18 +188,20 @@ const ContactsScreen = () => {
           try {
             const canOpen = await Linking.canOpenURL(url);
             if (canOpen) {
+              console.log(`✅ Opening ${url}`);
               await Linking.openURL(url);
               return;
             }
           } catch (error) {
-            console.log(`Failed to open ${url}:`, error);
+            console.log(`❌ Failed to open ${url}:`, error);
           }
         }
         
         try {
+          console.log("📱 Fallback to phone app");
           await Linking.openURL('tel:');
         } catch (error) {
-          console.log('Failed to open Phone app:', error);
+          console.log('❌ Failed to open Phone app:', error);
         }
         
       } else if (Platform.OS === 'android') {
@@ -302,73 +215,31 @@ const ContactsScreen = () => {
           try {
             const canOpen = await Linking.canOpenURL(url);
             if (canOpen) {
+              console.log(`✅ Opening ${url}`);
               await Linking.openURL(url);
               return;
             }
           } catch (error) {
-            console.log(`Failed to open ${url}:`, error);
+            console.log(`❌ Failed to open ${url}:`, error);
           }
         }
       }
       
     } catch (error) {
-      console.log('Error opening contacts app:', error);
+      console.error('❌ Error opening contacts app:', error);
     }
   };
 
-  const renderContactItem = ({ item }: { item: typeof mockContacts[0] }) => (
-    <TouchableOpacity 
-      style={styles.contactItem}
-      onPress={() => handleContactPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.contactAvatar}>
-        {item.avatar ? (
-          <Image 
-            source={{ uri: item.avatar }} 
-            style={styles.avatarImage}
-            onError={() => console.log('Avatar loading failed')}
-          />
-        ) : (
-          <View style={[styles.avatarFallback, { backgroundColor: getAvatarColor(item.name) }]}>
-            <Text style={styles.avatarInitials}>{getInitials(item.name)}</Text>
-          </View>
-        )}
-        {item.status === 'online' && <View style={styles.onlineIndicator} />}
-      </View>
-      
-      <View style={styles.contactInfo}>
-        <Text style={styles.contactName}>{item.name}</Text>
-        <Text style={styles.contactStatus}>
-          {item.status === 'online' ? 'Online' : `Last seen ${item.lastSeen}`}
-        </Text>
-      </View>
-      
-      <TouchableOpacity style={styles.messageButton}>
-        <Ionicons name="chatbubble-outline" size={20} color="#007AFF" />
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
-
-  const renderSectionHeader = (letter: string) => (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionHeaderText}>{letter}</Text>
-    </View>
-  );
-
-  const renderGroupedContacts = () => {
-    const sections = Object.keys(groupedContacts).sort();
-    
-    return sections.map(letter => (
-      <View key={letter}>
-        {renderSectionHeader(letter)}
-        {groupedContacts[letter].map(contact => (
-          <View key={contact.id}>
-            {renderContactItem({ item: contact })}
-          </View>
-        ))}
-      </View>
-    ));
+  // Generate QR payload with unique user data
+  const generateQRPayload = () => {
+    const qrPayload = {
+      uid: userData.uid,
+      name: userData.name,
+      username: userData.username,
+      timestamp: Date.now(), // Add timestamp for uniqueness
+    };
+    console.log("🔑 Generated QR payload:", qrPayload);
+    return JSON.stringify(qrPayload);
   };
 
   return (
@@ -409,35 +280,18 @@ const ContactsScreen = () => {
             </View>
           </View>
 
-          {/* Contacts List */}
+          {/* Empty State - No Contacts */}
           <View style={styles.contactsContainer}>
-            {filteredContacts.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="people-outline" size={64} color="#C7C7CC" />
-                <Text style={styles.emptyStateTitle}>
-                  {searchQuery ? 'No contacts found' : 'No contacts yet'}
-                </Text>
-                <Text style={styles.emptyStateSubtitle}>
-                  {searchQuery 
-                    ? 'Try searching with a different name or phone number'
-                    : 'Add contacts to start chatting with friends'
-                  }
-                </Text>
-                {!searchQuery && (
-                  <TouchableOpacity style={styles.addContactButton} onPress={handleAddContact}>
-                    <Text style={styles.addContactButtonText}>Add Contact</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : (
-              <FlatList
-                data={[{ id: 'grouped' }]}
-                keyExtractor={(item) => item.id}
-                renderItem={() => <View>{renderGroupedContacts()}</View>}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.listContent}
-              />
-            )}
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={64} color="#C7C7CC" />
+              <Text style={styles.emptyStateTitle}>No contacts yet</Text>
+              <Text style={styles.emptyStateSubtitle}>
+                Add contacts to start chatting with friends. Use QR codes for quick connections or add phone numbers manually.
+              </Text>
+              <TouchableOpacity style={styles.addContactButton} onPress={handleAddContact}>
+                <Text style={styles.addContactButtonText}>Add Contact</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </SafeAreaView>
       </View>
@@ -527,9 +381,11 @@ const ContactsScreen = () => {
                 <View style={styles.qrDisplayContainer}>
                   <View style={styles.qrFrame}>
                     <QRCode
-  value={JSON.stringify({ uid: auth.currentUser?.uid })}
-  size={160}
-/>
+                      value={generateQRPayload()}
+                      size={160}
+                      backgroundColor="#FFFFFF"
+                      color="#000000"
+                    />
                   </View>
                   
                   {/* User Info */}
@@ -546,6 +402,7 @@ const ContactsScreen = () => {
                     </View>
                     <Text style={styles.qrUserName}>{userData.name}</Text>
                     <Text style={styles.qrUserUsername}>{userData.username}</Text>
+                    <Text style={styles.qrUserUid}>ID: {userData.uid.slice(-8)}</Text>
                   </View>
                   
                   <Text style={styles.qrTitle}>Share My Contact</Text>
@@ -641,82 +498,6 @@ const styles = StyleSheet.create({
   // Contacts
   contactsContainer: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
-  },
-  listContent: {
-    paddingBottom: 20,
-  },
-  sectionHeader: {
-    backgroundColor: '#F2F2F7',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
-  },
-  sectionHeaderText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8E8E93',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  contactItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
-  },
-  contactAvatar: {
-    position: 'relative',
-    marginRight: 12,
-  },
-  avatarImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  avatarFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitials: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  onlineIndicator: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#30D158',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  contactInfo: {
-    flex: 1,
-  },
-  contactName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 2,
-  },
-  contactStatus: {
-    fontSize: 14,
-    color: '#8E8E93',
-  },
-  messageButton: {
-    padding: 8,
-    borderRadius: 16,
     backgroundColor: '#F2F2F7',
   },
 
@@ -879,11 +660,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  qrCodeImage: {
-    width: 160,
-    height: 160,
-    borderRadius: 8,
-  },
   qrUserInfo: {
     alignItems: 'center',
     marginBottom: 16,
@@ -917,6 +693,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#007AFF',
     fontWeight: '500',
+    marginBottom: 2,
+  },
+  qrUserUid: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontFamily: 'monospace',
   },
   qrTitle: {
     fontSize: 18,
