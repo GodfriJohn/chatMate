@@ -172,18 +172,11 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Handle actual QR scanning
   const handleStartQRScan = () => {
-    closeQrModal();
-    setTimeout(() => {
-      Alert.alert(
-        'QR Scanner',
-        'Opening camera to scan contact QR code...',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open Camera', onPress: () => console.log('Opening QR scanner for contact') }
-        ]
-      );
-    }, 100);
-  };
+  closeQrModal();
+  setTimeout(() => {
+    router.push('/qr-scanner'); // this loads your QR scanner screen
+  }, 100);
+};
 
   // Handle phone number entry - Open native contacts app directly
   const handlePhoneNumberEntry = async () => {

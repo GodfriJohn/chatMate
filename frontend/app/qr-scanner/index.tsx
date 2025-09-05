@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../../src/api/firebase';
-import { createChat } from '../../src/api/chatService';
+import { createOrGetChat } from '../../src/api/chatService';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
-import { BarCodeScanner } from 'expo-barcode-scanner';
+import { CameraView, Camera } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -20,32 +20,48 @@ const QRScannerScreen = () => {
   const [scanned, setScanned] = useState(false);
 
   useEffect(() => {
-    const getBarCodeScannerPermissions = async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
+    const getCameraPermissions = async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
       setHasPermission(status === 'granted');
     };
-    getBarCodeScannerPermissions();
+    getCameraPermissions();
   }, []);
 
-  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
+  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+     console.log("📸 QR scanned! Raw data:", data);
     setScanned(true);
     try {
       const parsed = JSON.parse(data);
+      console.log("✅ Parsed QR:", parsed);
 
       if (parsed.uid) {
         const me = auth.currentUser?.uid;
+        console.log("👤 Current user:", me, "Scanned UID:", parsed.uid);
         if (!me) throw new Error('Not logged in');
         if (parsed.uid === me) throw new Error('You scanned your own QR');
 
-        const chatId = await createChat(me, parsed.uid);
+        console.log("💬 Creating or getting chat with:", parsed.uid);
+      const chatId = await createOrGetChat(parsed.uid);
+      console.log("✅ Chat ID created:", chatId);
 
-        Alert.alert('Connected!', 'Chat created successfully', [
-          { text: 'OK', onPress: () => router.replace(`/chat/${chatId}`) },
-        ]);
-      } else {
+         Alert.alert("Connected!", "Chat created successfully", [
+        {
+          text: "OK",
+          onPress: () => {
+            console.log("➡️ Navigating to chat with ID:", chatId);
+            router.replace({
+              pathname: "/chat/[id]",
+              params: { id: chatId },
+            });
+          },
+        },
+      ]);
+    } else {
+       console.warn("⚠️ Invalid QR format, missing uid field");
         throw new Error('Invalid QR format');
       }
     } catch (err: any) {
+       console.error("❌ QR Scan failed:", err);
       Alert.alert('Scan failed', err.message ?? 'Invalid QR code');
       setScanned(false);
     }
@@ -90,9 +106,13 @@ const QRScannerScreen = () => {
 
         {/* QR Scanner */}
         <View style={styles.cameraContainer}>
-          <BarCodeScanner
-            onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
+          <CameraView
             style={styles.camera}
+            facing="back"
+            barcodeScannerSettings={{
+              barcodeTypes: ['qr'],
+            }}
+            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
           />
 
           {/* Overlay */}

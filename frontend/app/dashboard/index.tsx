@@ -293,7 +293,7 @@ const ChatInterface = () => {
     
     console.log('Opening chat with:', chat.name);
     router.push({
-      pathname: '/chat',
+      pathname: '/chat/[id]',
       params: {
         id: chat.id,
         chatName: chat.name,
