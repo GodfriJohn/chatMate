@@ -1,40 +1,22 @@
 // src/api/authService.ts
 import { auth } from "./firebase";
-import {
-  onAuthStateChanged,
-  signInAnonymously,
-  User,
-  signOut,
-} from "firebase/auth";
+import { signInAnonymously } from "firebase/auth";
 
 /**
- * Ensures we have a logged-in user (anonymous).
- * Returns the Firebase UID.
+ * Ensures there is a logged-in Firebase user.
+ * - If a user is already restored via persistence, reuse it.
+ * - Otherwise, sign in anonymously and return the UID.
  */
 export async function ensureAnonLogin(): Promise<string> {
-  // If already logged in, return immediately
-  if (auth.currentUser?.uid) return auth.currentUser.uid;
+  // ✅ If Firebase already restored a user (persistence), just return it
+  if (auth.currentUser) {
+    console.log("🔑 Using existing Firebase user:", auth.currentUser.uid);
+    return auth.currentUser.uid;
+  }
 
-  // Try to restore current user first (wait briefly for auth to hydrate)
-  const existing = await waitForAuthUserOnce();
-  if (existing?.uid) return existing.uid;
+  // ✅ If no user, sign in anonymously
+  const result = await signInAnonymously(auth);
+  console.log("🆕 Signed in anonymously:", result.user.uid);
 
-  // Otherwise sign in anonymously
-  const cred = await signInAnonymously(auth);
-  return cred.user.uid;
-}
-
-/** Sign out helper (not required now, but handy) */
-export async function logout() {
-  await signOut(auth);
-}
-
-/** Utilities */
-function waitForAuthUserOnce(): Promise<User | null> {
-  return new Promise((resolve) => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      unsub();
-      resolve(user);
-    });
-  });
+  return result.user.uid;
 }

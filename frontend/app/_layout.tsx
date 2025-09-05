@@ -4,15 +4,15 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
+import { auth } from "../src/api/firebase";
 import { ensureAnonLogin } from "../src/api/authService";
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { View } from 'react-native';
-import { initSQLite } from "../src/db/sqlite";   // ✅ import
+import { initSQLite } from "../src/db/sqlite";
+import { syncPendingData } from "../src/api/chatService";   // ✅ import sync
 
-// Context now only needs uid
 export const AuthContext = createContext<{ uid: string | null }>({ uid: null });
 
-// Custom themes
 const CustomDefaultTheme = {
   ...DefaultTheme,
   colors: {
@@ -50,14 +50,25 @@ export default function RootLayout() {
   useEffect(() => {
     (async () => {
       try {
-       // ✅ Initialize SQLite before anything else
         await initSQLite();
         console.log("✅ SQLite initialized");
 
-        // ✅ Login to Firebase
-        const id = await ensureAnonLogin();
-        console.log("✅ Firebase logged in as:", id);
-        setUid(id);
+        if (auth.currentUser) {
+          console.log("🔑 Using restored user:", auth.currentUser.uid);
+          setUid(auth.currentUser.uid);
+        } else {
+          const id = await ensureAnonLogin();
+          console.log("🆕 Signed in anonymously:", id);
+          setUid(id);
+        }
+
+        // ✅ Trigger background sync once on startup
+        await syncPendingData();
+
+        // ✅ Set up periodic sync (every 30s)
+        const interval = setInterval(syncPendingData, 30_000);
+
+        return () => clearInterval(interval);
       } catch (e) {
         console.error("Startup error:", e);
       }

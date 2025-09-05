@@ -1,3 +1,4 @@
+// src/db/sqlite.ts
 import * as SQLite from 'expo-sqlite';
 
 // Open synchronously
@@ -21,8 +22,8 @@ export async function exec(sql: string, params: any[] = []): Promise<void> {
   }
 }
 
-
 export async function initSQLite() {
+  // Messages table (existing)
   await exec(`
     CREATE TABLE IF NOT EXISTS messages (
       clientId   TEXT PRIMARY KEY,
@@ -38,5 +39,30 @@ export async function initSQLite() {
   await exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_chat_created 
     ON messages(chatId, createdAt DESC)
+  `);
+
+  // 🆕 Chats table for offline persistence
+  await exec(`
+    CREATE TABLE IF NOT EXISTS chats (
+      id TEXT PRIMARY KEY,
+      pairKey TEXT NOT NULL UNIQUE,
+      participants TEXT NOT NULL,
+      createdAt INTEGER,
+      lastUpdated INTEGER,
+      lastMessageText TEXT,
+      lastMessageFrom TEXT,
+      lastMessageCreatedAt INTEGER,
+      syncStatus TEXT DEFAULT 'synced' CHECK (syncStatus IN ('synced', 'pending', 'failed'))
+    )
+  `);
+
+  await exec(`
+    CREATE INDEX IF NOT EXISTS idx_chats_lastUpdated 
+    ON chats(lastUpdated DESC)
+  `);
+
+  await exec(`
+    CREATE INDEX IF NOT EXISTS idx_chats_pairKey 
+    ON chats(pairKey)
   `);
 }
