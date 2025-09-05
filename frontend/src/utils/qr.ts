@@ -1,53 +1,42 @@
 // src/api/qr.ts
-export type QrPayload = { 
-  v: 1; 
+
+// One canonical payload for v1
+export type QrPayloadV1 = {
+  v: 1;
   uid: string;
-  name?: string;
   username?: string;
-  timestamp: number;
+  name?: string;
+  ts?: number; // optional timestamp
 };
 
-/**
- * Generate a QR code string with user data
- */
-export const makeQrString = (uid: string, name?: string, username?: string): string =>
-  JSON.stringify({ 
-    v: 1, 
-    uid,
-    name,
-    username,
-    timestamp: Date.now()
-  } as QrPayload);
+// Build the payload you’ll embed in the QR
+export function buildQrPayload(input: {
+  uid: string;
+  username?: string;
+  name?: string;
+}): QrPayloadV1 {
+  if (!input.uid) throw new Error("QR: uid is required");
+  return { v: 1, uid: input.uid, username: input.username, name: input.name, ts: Date.now() };
+}
 
-/**
- * Parse and validate a scanned QR code string
- */
-export const parseQrString = (raw: string): QrPayload => {
+// Stringify for the QR component
+export function encodeQrPayload(p: QrPayloadV1): string {
+  return JSON.stringify(p);
+}
+
+// Parse + validate scanned QR string
+export function parseQrPayload(raw: string): QrPayloadV1 {
+  let data: any;
   try {
-    const data = JSON.parse(raw);
-    
-    // Validate required fields
-    if (!data?.uid || typeof data.uid !== 'string') {
-      throw new Error('Invalid QR: missing or invalid uid');
-    }
-    
-    // Validate version if present
-    if (data.v && data.v !== 1) {
-      throw new Error('Invalid QR: unsupported version');
-    }
-    
-    // Return standardized payload
-    return {
-      v: 1,
-      uid: data.uid,
-      name: data.name || null,
-      username: data.username || null,
-      timestamp: data.timestamp || Date.now()
-    };
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      throw new Error('Invalid QR: malformed JSON');
-    }
-    throw error;
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error("QR: invalid JSON");
   }
-};
+  if (!data || typeof data !== "object") throw new Error("QR: invalid object");
+  if (data.v !== 1) throw new Error("QR: unsupported version");
+  if (typeof data.uid !== "string" || !data.uid) throw new Error("QR: missing uid");
+  // optional fields
+  if (data.username && typeof data.username !== "string") delete data.username;
+  if (data.name && typeof data.name !== "string") delete data.name;
+  return data as QrPayloadV1;
+}

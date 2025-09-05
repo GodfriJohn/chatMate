@@ -17,7 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { useRouter, usePathname } from 'expo-router';
 import { auth } from '../src/api/firebase';
-import { makeQrString } from '../src/utils/qr'; // Use standardized QR utility
+import { getUserProfile } from '../src/db/userRepo';
+import { buildQrPayload, encodeQrPayload, parseQrPayload } from "../src/utils/qr";
+
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
@@ -41,26 +43,40 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
   const [contactSlideAnim] = useState(new Animated.Value(screenHeight));
   const [qrScaleAnim] = useState(new Animated.Value(0));
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
-  // Get current user data
+  // Get current user data and profile
   useEffect(() => {
-    console.log("BottomNavigation: Getting current user");
-    const user = auth.currentUser;
-    if (user) {
-      console.log("Current user found in BottomNav:", user.uid);
-      setCurrentUser(user);
-    } else {
-      console.warn("No current user found in BottomNav");
-    }
+    loadUserData();
   }, []);
 
-  // Generate unique user data based on Firebase user
+  const loadUserData = async () => {
+    try {
+      console.log("BottomNavigation: Getting current user");
+      const user = auth.currentUser;
+      if (user) {
+        console.log("Current user found in BottomNav:", user.uid);
+        setCurrentUser(user);
+        
+        // Load user profile from SQLite
+        const profile = await getUserProfile(user.uid);
+        setUserProfile(profile);
+        console.log("User profile loaded:", profile?.username);
+      } else {
+        console.warn("No current user found in BottomNav");
+      }
+    } catch (error) {
+      console.error("Failed to load user data:", error);
+    }
+  };
+
+  // Generate user data based on Firebase user and profile
   const userData = {
     uid: currentUser?.uid || 'no-uid',
-    name: currentUser?.displayName || `User ${currentUser?.uid?.slice(-4) || '0000'}`,
-    username: `@user${currentUser?.uid?.slice(-6) || '000000'}`,
-    email: currentUser?.email || 'anonymous@example.com',
-    avatar: currentUser?.photoURL || null,
+    username: userProfile?.username || `user${currentUser?.uid?.slice(-6) || '000000'}`,
+    displayName: userProfile?.displayName || userProfile?.username || currentUser?.displayName || `User ${currentUser?.uid?.slice(-4) || '0000'}`,
+    email: userProfile?.email || currentUser?.email || 'anonymous@example.com',
+    avatar: userProfile?.photoURL || currentUser?.photoURL || null,
   };
 
   console.log("BottomNav user data:", userData);
@@ -269,20 +285,25 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
     }, 100);
   };
 
-  // Generate QR payload using standardized utility
+  // Generate QR payload using standardized utility with profile data
   const generateQRPayload = () => {
-    if (!currentUser?.uid) {
-      console.warn("No current user UID available for QR generation");
-      return makeQrString('no-uid', 'Unknown User', '@unknown');
-    }
-    
-    console.log("Generating QR for user:", currentUser.uid);
-    return makeQrString(
-      userData.uid,
-      userData.name,
-      userData.username
-    );
-  };
+  if (!currentUser?.uid) {
+    console.warn("No current user UID available for QR generation");
+    return encodeQrPayload(buildQrPayload({ uid: "no-uid", username: "guest" }));
+  }
+
+  const payload = buildQrPayload({
+    uid: userData.uid,
+    username: userData.username,
+    name: userData.displayName,
+    email: userData.email,
+    avatar: userData.avatar,
+  });
+
+  console.log("Generating QR payload:", payload);
+
+  return encodeQrPayload(payload);
+};
 
   // Determine active tab based on current route
   const isHomeActive = pathname === '/dashboard' || pathname === '/dashboard/';
@@ -484,18 +505,18 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
                   
                   {/* User Info */}
                   <View style={styles.qrUserInfo}>
-                    <View style={[styles.qrAvatar, { backgroundColor: getAvatarColor(userData.name) }]}>
+                    <View style={[styles.qrAvatar, { backgroundColor: getAvatarColor(userData.displayName) }]}>
                       {userData.avatar ? (
                         <Image 
                           source={{ uri: userData.avatar }} 
                           style={styles.qrAvatarImage}
                         />
                       ) : (
-                        <Text style={styles.qrAvatarText}>{getInitials(userData.name)}</Text>
+                        <Text style={styles.qrAvatarText}>{getInitials(userData.displayName)}</Text>
                       )}
                     </View>
-                    <Text style={styles.qrUserName}>{userData.name}</Text>
-                    <Text style={styles.qrUserUsername}>{userData.username}</Text>
+                    <Text style={styles.qrUserName}>{userData.displayName}</Text>
+                    <Text style={styles.qrUserUsername}>@{userData.username}</Text>
                     <Text style={styles.qrUserUid}>ID: {userData.uid.slice(-8)}</Text>
                   </View>
                   
@@ -736,11 +757,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  qrCodeImage: {
-    width: 160,
-    height: 160,
-    borderRadius: 8,
   },
   qrUserInfo: {
     alignItems: 'center',

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { auth } from '../../src/api/firebase';
 import { createOrGetChat } from '../../src/api/chatService';
-import { parseQrString } from '../../src/utils/qr';
+import { parseQrPayload } from '../../src/utils/qr';
+
 import {
   View,
   Text,
@@ -109,8 +110,8 @@ const QRScannerScreen = () => {
 
   const processQRCode = async (qrData: string) => {
     // Parse the QR code data
-    const parsed = parseQrString(qrData);
-    console.log('Parsed QR data:', parsed);
+    const parsed = parseQrPayload(qrData);
+console.log("Decoded QR payload:", parsed);
 
     // Get current user
     const currentUser = auth.currentUser;
@@ -125,13 +126,17 @@ const QRScannerScreen = () => {
 
     console.log('Creating chat between users:', currentUser.uid, 'and', parsed.uid);
     
-    // Create or get existing chat
-    const chatId = await createOrGetChat(parsed.uid);
+    // Create or get existing chat with user info
+    const chatId = await createOrGetChat(
+      parsed.uid, 
+      parsed.username, 
+      parsed.name
+    );
     console.log('Chat created/retrieved:', chatId);
 
     // Show success and navigate
-    const userName = parsed.name || `User ${parsed.uid.slice(-4)}`;
-    showSuccessDialog(chatId, userName);
+    const displayName = parsed.name || parsed.username || `User ${parsed.uid.slice(-4)}`;
+    showSuccessDialog(chatId, displayName);
   };
 
   const handleQRError = (error: any) => {
@@ -170,10 +175,10 @@ const QRScannerScreen = () => {
     ]);
   };
 
-  const showSuccessDialog = (chatId: string, userName: string) => {
+  const showSuccessDialog = (chatId: string, displayName: string) => {
     Alert.alert(
       'Contact Added Successfully!',
-      `You can now chat with ${userName}`,
+      `You can now chat with ${displayName}`,
       [
         {
           text: 'Start Chatting',
@@ -182,7 +187,7 @@ const QRScannerScreen = () => {
               pathname: '/chat/[id]',
               params: { 
                 id: chatId,
-                chatName: userName,
+                chatName: displayName,
               },
             });
           },
