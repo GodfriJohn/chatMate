@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { auth } from '../../src/api/firebase';
 import { createOrGetChat } from '../../src/api/chatService';
+import { parseQrString } from '../../src/utils/qr';
 import {
   View,
   Text,
@@ -9,6 +10,8 @@ import {
   Alert,
   SafeAreaView,
   StatusBar,
+  Vibration,
+  Animated,
 } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,195 +20,259 @@ import { useRouter } from 'expo-router';
 const QRScannerScreen = () => {
   const router = useRouter();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [scanned, setScanned] = useState(false);
+  const [isScanning, setIsScanning] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [scanResult, setScanResult] = useState<string | null>(null);
+  
+  // Animation and scan management
+  const scanLineAnimation = useRef(new Animated.Value(0)).current;
   const processedQRCodes = useRef(new Set<string>());
   const lastScanTime = useRef(0);
+  const scanCooldown = 3000; // 3 seconds between scans
 
   useEffect(() => {
-    console.log("📷 QRScannerScreen: Component mounted");
-    const getCameraPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      console.log("📷 Camera permission status:", status);
-      setHasPermission(status === 'granted');
+    initializeCamera();
+    startScanLineAnimation();
+    
+    return () => {
+      stopScanLineAnimation();
     };
-    getCameraPermissions();
   }, []);
 
-  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+  const initializeCamera = async () => {
+    try {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      console.log('Camera permission status:', status);
+      setHasPermission(status === 'granted');
+    } catch (error) {
+      console.error('Error requesting camera permission:', error);
+      setHasPermission(false);
+    }
+  };
+
+  const startScanLineAnimation = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scanLineAnimation, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: false,
+        }),
+        Animated.timing(scanLineAnimation, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: false,
+        }),
+      ])
+    ).start();
+  };
+
+  const stopScanLineAnimation = () => {
+    scanLineAnimation.stopAnimation();
+  };
+
+  const handleBarCodeScanned = useCallback(async ({ data }: { data: string }) => {
     const currentTime = Date.now();
     
-    // Prevent processing if already processing or scanned recently (within 2 seconds)
-    if (isProcessing || scanned || (currentTime - lastScanTime.current < 2000)) {
-      console.log("⏸️ Scan ignored - already processing or too recent");
+    // Prevent multiple scans within cooldown period
+    if (!isScanning || isProcessing || (currentTime - lastScanTime.current < scanCooldown)) {
       return;
     }
 
-    // Check if this QR code was already processed in this session
+    // Check if this QR code was already processed
     if (processedQRCodes.current.has(data)) {
-      console.log("⏸️ QR code already processed in this session");
+      showTemporaryMessage('QR code already processed');
       return;
     }
 
-    console.log("🔍 QR Code Scanned!");
-    console.log("📄 Raw QR data:", data);
+    console.log('QR Code detected:', data);
     
-    // Immediately set processing state to prevent multiple scans
+    // Stop scanning and start processing
+    setIsScanning(false);
     setIsProcessing(true);
-    setScanned(true);
+    setScanResult(data);
     lastScanTime.current = currentTime;
     processedQRCodes.current.add(data);
     
+    // Provide haptic feedback
+    Vibration.vibrate(100);
+    
     try {
-      // Parse the QR code data
-      const parsed = JSON.parse(data);
-      console.log("✅ Parsed QR data:", parsed);
-
-      // Validate the QR code structure
-      if (!parsed.uid) {
-        console.error("❌ QR code missing 'uid' field");
-        throw new Error('Invalid QR format: missing uid');
-      }
-
-      // Get current user
-      const currentUser = auth.currentUser;
-      console.log("👤 Current user:", currentUser?.uid);
-
-      if (!currentUser) {
-        console.error("❌ No authenticated user");
-        throw new Error('Not logged in');
-      }
-
-      if (parsed.uid === currentUser.uid) {
-        console.warn("⚠️ User tried to scan their own QR code");
-        throw new Error('You cannot add yourself as a contact');
-      }
-
-      console.log("💬 Creating chat between:", currentUser.uid, "and", parsed.uid);
-      
-      // Create or get existing chat
-      const chatId = await createOrGetChat(parsed.uid);
-      console.log("✅ Chat created/found with ID:", chatId);
-
-      // Show success message
-      const userName = parsed.name || `User ${parsed.uid.slice(-4)}`;
-      Alert.alert(
-        "Contact Added Successfully!",
-        `You can now chat with ${userName}`,
-        [
-          {
-            text: "Start Chatting",
-            onPress: () => {
-              console.log("➡️ Navigating to chat:", chatId);
-              router.replace({
-                pathname: "/chat/[id]",
-                params: { 
-                  id: chatId,
-                  chatName: userName,
-                },
-              });
-            },
-          },
-          {
-            text: "Later",
-            style: "cancel",
-            onPress: () => {
-              console.log("📱 User chose to go back to dashboard");
-              router.replace("/dashboard");
-            },
-          },
-        ]
-      );
-
-    } catch (error: any) {
-      console.error("❌ QR Scan error:", error);
-      
-      // Show user-friendly error message
-      let errorMessage = 'Invalid QR code';
-      if (error.message.includes('Not logged in')) {
-        errorMessage = 'Please log in first';
-      } else if (error.message.includes('add yourself')) {
-        errorMessage = 'You cannot add yourself as a contact';
-      } else if (error.message.includes('Invalid QR format')) {
-        errorMessage = 'This QR code is not from this app';
-      }
-
-      Alert.alert(
-        'Scan Failed',
-        errorMessage,
-        [
-          {
-            text: "Try Again",
-            onPress: () => {
-              console.log("🔄 User chose to try scanning again");
-              resetScanState();
-            },
-          },
-          {
-            text: "Cancel",
-            style: "cancel",
-            onPress: () => {
-              console.log("❌ User cancelled scanning");
-              router.back();
-            },
-          },
-        ]
-      );
+      await processQRCode(data);
+    } catch (error) {
+      console.error('QR processing error:', error);
+      handleQRError(error);
     } finally {
       setIsProcessing(false);
     }
+  }, [isScanning, isProcessing]);
+
+  const processQRCode = async (qrData: string) => {
+    // Parse the QR code data
+    const parsed = parseQrString(qrData);
+    console.log('Parsed QR data:', parsed);
+
+    // Get current user
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('Authentication required');
+    }
+
+    // Validate user is not scanning their own QR
+    if (parsed.uid === currentUser.uid) {
+      throw new Error('Cannot add yourself as contact');
+    }
+
+    console.log('Creating chat between users:', currentUser.uid, 'and', parsed.uid);
+    
+    // Create or get existing chat
+    const chatId = await createOrGetChat(parsed.uid);
+    console.log('Chat created/retrieved:', chatId);
+
+    // Show success and navigate
+    const userName = parsed.name || `User ${parsed.uid.slice(-4)}`;
+    showSuccessDialog(chatId, userName);
   };
 
-  const resetScanState = () => {
-    setScanned(false);
+  const handleQRError = (error: any) => {
+    let title = 'Scan Failed';
+    let message = 'Unable to process QR code';
+    
+    const errorMsg = error?.message || '';
+    
+    if (errorMsg.includes('Authentication required')) {
+      title = 'Login Required';
+      message = 'Please log in to add contacts';
+    } else if (errorMsg.includes('add yourself')) {
+      title = 'Invalid QR Code';
+      message = 'You cannot add yourself as a contact';
+    } else if (errorMsg.includes('Invalid QR')) {
+      title = 'Invalid QR Code';
+      message = 'This QR code is not compatible with this app';
+    } else if (errorMsg.includes('malformed JSON')) {
+      title = 'Corrupted QR Code';
+      message = 'The QR code appears to be damaged';
+    } else if (errorMsg.includes('unsupported version')) {
+      title = 'Incompatible Version';
+      message = 'This QR code is from an incompatible app version';
+    }
+
+    Alert.alert(title, message, [
+      {
+        text: 'Try Again',
+        onPress: () => resetScanner(),
+      },
+      {
+        text: 'Cancel',
+        style: 'cancel',
+        onPress: () => router.back(),
+      },
+    ]);
+  };
+
+  const showSuccessDialog = (chatId: string, userName: string) => {
+    Alert.alert(
+      'Contact Added Successfully!',
+      `You can now chat with ${userName}`,
+      [
+        {
+          text: 'Start Chatting',
+          onPress: () => {
+            router.replace({
+              pathname: '/chat/[id]',
+              params: { 
+                id: chatId,
+                chatName: userName,
+              },
+            });
+          },
+        },
+        {
+          text: 'Later',
+          style: 'cancel',
+          onPress: () => router.replace('/dashboard'),
+        },
+      ]
+    );
+  };
+
+  const showTemporaryMessage = (message: string) => {
+    Alert.alert('Notice', message, [
+      { text: 'OK', onPress: () => resetScanner() }
+    ]);
+  };
+
+  const resetScanner = () => {
+    setIsScanning(true);
     setIsProcessing(false);
-    // Don't clear processedQRCodes to prevent re-scanning the same code
-    // processedQRCodes.current.clear(); // Only clear this if you want to allow re-scanning
+    setScanResult(null);
+    // Allow re-scanning after reset
+    processedQRCodes.current.clear();
   };
 
   const handleBackPress = () => {
-    console.log("🔙 Back button pressed from QR scanner");
+    console.log('Exiting QR scanner');
     router.back();
   };
 
+  // Permission states
   if (hasPermission === null) {
-    console.log("⏳ Waiting for camera permission...");
     return (
       <View style={styles.container}>
-        <Text style={styles.permissionText}>Requesting camera permission...</Text>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.centerContent}>
+            <Ionicons name="camera-outline" size={64} color="#666" />
+            <Text style={styles.permissionText}>Requesting camera access...</Text>
+          </View>
+        </SafeAreaView>
       </View>
     );
   }
 
   if (hasPermission === false) {
-    console.log("❌ Camera permission denied");
     return (
       <View style={styles.container}>
-        <Text style={styles.permissionText}>No access to camera</Text>
-        <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.centerContent}>
+            <Ionicons name="camera-off-outline" size={64} color="#FF3B30" />
+            <Text style={styles.permissionText}>Camera access denied</Text>
+            <Text style={styles.permissionSubtext}>
+              Please enable camera permission in your device settings to scan QR codes
+            </Text>
+            <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
+              <Text style={styles.backButtonText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       </View>
     );
   }
 
-  console.log("📷 Rendering camera view");
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
-
+      
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.headerBackButton} onPress={handleBackPress}>
+          <TouchableOpacity style={styles.headerButton} onPress={handleBackPress}>
             <Ionicons name="close" size={28} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Scan QR Code</Text>
-          <View style={styles.headerRight} />
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={resetScanner}
+            disabled={isProcessing}
+          >
+            <Ionicons 
+              name="refresh" 
+              size={24} 
+              color={isProcessing ? "#666" : "#FFFFFF"} 
+            />
+          </TouchableOpacity>
         </View>
 
-        {/* QR Scanner */}
+        {/* Camera View */}
         <View style={styles.cameraContainer}>
           <CameraView
             style={styles.camera}
@@ -213,49 +280,70 @@ const QRScannerScreen = () => {
             barcodeScannerSettings={{
               barcodeTypes: ['qr'],
             }}
-            onBarcodeScanned={(scanned || isProcessing) ? undefined : handleBarCodeScanned}
+            onBarcodeScanned={isScanning ? handleBarCodeScanned : undefined}
           />
 
-          {/* Overlay */}
+          {/* Scanner Overlay */}
           <View style={styles.overlay}>
-            <View style={styles.overlayTop} />
+            {/* Top overlay */}
+            <View style={styles.overlaySection} />
 
-            <View style={styles.overlayMiddle}>
-              <View style={styles.overlaySide} />
+            {/* Middle section with scanning frame */}
+            <View style={styles.scanningSection}>
+              <View style={styles.overlaySection} />
+              
               <View style={styles.scanningFrame}>
+                {/* Corner markers */}
                 <View style={[styles.corner, styles.topLeft]} />
                 <View style={[styles.corner, styles.topRight]} />
                 <View style={[styles.corner, styles.bottomLeft]} />
                 <View style={[styles.corner, styles.bottomRight]} />
                 
+                {/* Animated scan line */}
+                {isScanning && !isProcessing && (
+                  <Animated.View
+                    style={[
+                      styles.scanLine,
+                      {
+                        top: scanLineAnimation.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [10, 240],
+                        }),
+                      },
+                    ]}
+                  />
+                )}
+                
                 {/* Processing indicator */}
                 {isProcessing && (
                   <View style={styles.processingOverlay}>
-                    <Text style={styles.processingText}>Processing...</Text>
+                    <Ionicons name="checkmark-circle" size={64} color="#34C759" />
+                    <Text style={styles.processingText}>Processing QR Code...</Text>
                   </View>
                 )}
               </View>
-              <View style={styles.overlaySide} />
+              
+              <View style={styles.overlaySection} />
             </View>
 
-            <View style={styles.overlayBottom}>
+            {/* Bottom overlay with instructions */}
+            <View style={[styles.overlaySection, styles.instructionArea]}>
               <Text style={styles.instructionText}>
                 {isProcessing 
-                  ? "Processing QR code..." 
-                  : scanned 
-                    ? "QR code scanned successfully!"
-                    : "Position the QR code within the frame"
+                  ? 'Processing QR code...'
+                  : isScanning 
+                    ? 'Position the QR code within the frame'
+                    : 'QR code detected!'
                 }
               </Text>
-              {(scanned && !isProcessing) && (
+              
+              {scanResult && !isProcessing && (
                 <TouchableOpacity
-                  style={styles.scanAgainButton}
-                  onPress={() => {
-                    console.log("🔄 Scan again button pressed");
-                    resetScanState();
-                  }}
+                  style={styles.retryButton}
+                  onPress={resetScanner}
                 >
-                  <Text style={styles.scanAgainText}>Tap to Scan Again</Text>
+                  <Ionicons name="refresh" size={20} color="#FFFFFF" />
+                  <Text style={styles.retryButtonText}>Scan Again</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -274,19 +362,32 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
   permissionText: {
-    textAlign: 'center',
     fontSize: 18,
     color: '#FFFFFF',
-    marginTop: 100,
+    textAlign: 'center',
+    marginTop: 24,
+    fontWeight: '600',
+  },
+  permissionSubtext: {
+    fontSize: 14,
+    color: '#999999',
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 20,
   },
   backButton: {
     backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
-    marginTop: 20,
-    alignSelf: 'center',
+    marginTop: 32,
   },
   backButtonText: {
     color: '#FFFFFF',
@@ -300,24 +401,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingVertical: 16,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
   },
-  headerBackButton: {
+  headerButton: {
     padding: 8,
     borderRadius: 20,
+    minWidth: 44,
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  headerRight: {
-    width: 44,
-  },
 
-  // Scanner
+  // Camera
   cameraContainer: {
     flex: 1,
     position: 'relative',
@@ -334,78 +433,112 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  overlayTop: {
+  overlaySection: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
-  overlayMiddle: {
+  scanningSection: {
     flexDirection: 'row',
-    height: 250,
-  },
-  overlaySide: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    height: 280,
   },
   scanningFrame: {
-    width: 250,
-    height: 250,
+    width: 280,
+    height: 280,
     position: 'relative',
+    backgroundColor: 'transparent',
   },
-  overlayBottom: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    alignItems: 'center',
+  instructionArea: {
     justifyContent: 'center',
-    paddingHorizontal: 40,
+    alignItems: 'center',
+    paddingHorizontal: 32,
   },
 
-  // Processing overlay
+  // Scanning elements
+  corner: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderColor: '#FFFFFF',
+    borderWidth: 3,
+  },
+  topLeft: { 
+    top: 0, 
+    left: 0, 
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+  },
+  topRight: { 
+    top: 0, 
+    right: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+  },
+  bottomLeft: { 
+    bottom: 0, 
+    left: 0,
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+  },
+  bottomRight: { 
+    bottom: 0, 
+    right: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
+  },
+  
+  scanLine: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    height: 2,
+    backgroundColor: '#00FF00',
+    shadowColor: '#00FF00',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+  },
+
+  // Processing
   processingOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 123, 255, 0.3)',
-    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
-    borderRadius: 8,
+    alignItems: 'center',
+    borderRadius: 12,
   },
   processingText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    marginTop: 16,
   },
 
-  // Corners
-  corner: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderColor: '#FFFFFF',
-  },
-  topLeft: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 },
-  topRight: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 },
-  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3 },
-  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3 },
-
+  // Instructions
   instructionText: {
     fontSize: 16,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 20,
     fontWeight: '500',
+    lineHeight: 22,
   },
-  scanAgainButton: {
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#007AFF',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
+    marginTop: 24,
   },
-  scanAgainText: {
+  retryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    marginLeft: 8,
   },
 });
 

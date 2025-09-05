@@ -1,5 +1,6 @@
 import QRCode from 'react-native-qrcode-svg';
 import { auth } from '../../src/api/firebase';
+import { makeQrString } from '../../src/utils/qr'; // Use standardized QR utility
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -35,13 +36,13 @@ const ContactsScreen = () => {
 
   // Get current user data
   useEffect(() => {
-    console.log("🔥 ContactsScreen: useEffect triggered");
+    console.log("ContactsScreen: useEffect triggered");
     const user = auth.currentUser;
     if (user) {
-      console.log("✅ Current user found:", user.uid);
+      console.log("Current user found:", user.uid);
       setCurrentUser(user);
     } else {
-      console.warn("⚠️ No current user found");
+      console.warn("No current user found");
     }
   }, []);
 
@@ -54,7 +55,7 @@ const ContactsScreen = () => {
     avatar: currentUser?.photoURL || null,
   };
 
-  console.log("🔍 Generated user data:", userData);
+  console.log("Generated user data:", userData);
 
   // Helper function to get initials
   const getInitials = (name: string) => {
@@ -77,13 +78,13 @@ const ContactsScreen = () => {
   };
 
   const handleBackPress = () => {
-    console.log("🔙 Back button pressed");
+    console.log("Back button pressed");
     router.back();
   };
 
   // Show contact options modal
   const handleAddContact = () => {
-    console.log("👥 Add contact button pressed");
+    console.log("Add contact button pressed");
     setContactModalVisible(true);
     Animated.spring(contactScaleAnim, {
       toValue: 1,
@@ -95,7 +96,7 @@ const ContactsScreen = () => {
 
   // Close contact modal
   const closeContactModal = () => {
-    console.log("❌ Closing contact modal");
+    console.log("Closing contact modal");
     Animated.timing(contactScaleAnim, {
       toValue: 0,
       duration: 200,
@@ -107,7 +108,7 @@ const ContactsScreen = () => {
 
   // Show QR modal
   const showQrModal = () => {
-    console.log("📱 Showing QR modal");
+    console.log("Showing QR modal");
     closeContactModal();
     setTimeout(() => {
       setQrModalVisible(true);
@@ -122,7 +123,7 @@ const ContactsScreen = () => {
 
   // Close QR modal
   const closeQrModal = () => {
-    console.log("❌ Closing QR modal");
+    console.log("Closing QR modal");
     Animated.timing(qrScaleAnim, {
       toValue: 0,
       duration: 200,
@@ -134,26 +135,26 @@ const ContactsScreen = () => {
 
   // Handle QR scan option
   const handleQRScan = () => {
-    console.log("📷 QR scan option selected");
+    console.log("QR scan option selected");
     showQrModal();
   };
 
   // Handle actual QR scanning
   const handleStartQRScan = async () => {
-    console.log("🎯 Starting QR scan");
+    console.log("Starting QR scan");
     closeQrModal();
     
     try {
       // Request camera permissions
       const { status } = await Camera.requestCameraPermissionsAsync();
-      console.log("📷 Camera permission status:", status);
+      console.log("Camera permission status:", status);
       
       if (status === 'granted') {
-        console.log("✅ Camera permission granted, navigating to scanner");
+        console.log("Camera permission granted, navigating to scanner");
         // Navigate to QR scanner screen
         router.push('/qr-scanner');
       } else {
-        console.warn("⚠️ Camera permission denied");
+        console.warn("Camera permission denied");
         Alert.alert(
           'Camera Permission Required',
           'Please grant camera permission to scan QR codes.',
@@ -167,14 +168,14 @@ const ContactsScreen = () => {
         );
       }
     } catch (error) {
-      console.error("❌ Error requesting camera permission:", error);
+      console.error("Error requesting camera permission:", error);
       Alert.alert('Error', 'Failed to access camera. Please try again.');
     }
   };
 
   // Handle phone number entry - Open native contacts app directly
   const handlePhoneNumberEntry = async () => {
-    console.log("📞 Phone number entry selected");
+    console.log("Phone number entry selected");
     closeContactModal();
     
     try {
@@ -188,20 +189,20 @@ const ContactsScreen = () => {
           try {
             const canOpen = await Linking.canOpenURL(url);
             if (canOpen) {
-              console.log(`✅ Opening ${url}`);
+              console.log(`Opening ${url}`);
               await Linking.openURL(url);
               return;
             }
           } catch (error) {
-            console.log(`❌ Failed to open ${url}:`, error);
+            console.log(`Failed to open ${url}:`, error);
           }
         }
         
         try {
-          console.log("📱 Fallback to phone app");
+          console.log("Fallback to phone app");
           await Linking.openURL('tel:');
         } catch (error) {
-          console.log('❌ Failed to open Phone app:', error);
+          console.log('Failed to open Phone app:', error);
         }
         
       } else if (Platform.OS === 'android') {
@@ -215,31 +216,34 @@ const ContactsScreen = () => {
           try {
             const canOpen = await Linking.canOpenURL(url);
             if (canOpen) {
-              console.log(`✅ Opening ${url}`);
+              console.log(`Opening ${url}`);
               await Linking.openURL(url);
               return;
             }
           } catch (error) {
-            console.log(`❌ Failed to open ${url}:`, error);
+            console.log(`Failed to open ${url}:`, error);
           }
         }
       }
       
     } catch (error) {
-      console.error('❌ Error opening contacts app:', error);
+      console.error('Error opening contacts app:', error);
     }
   };
 
-  // Generate QR payload with unique user data
+  // Generate QR payload using standardized utility
   const generateQRPayload = () => {
-    const qrPayload = {
-      uid: userData.uid,
-      name: userData.name,
-      username: userData.username,
-      timestamp: Date.now(), // Add timestamp for uniqueness
-    };
-    console.log("🔑 Generated QR payload:", qrPayload);
-    return JSON.stringify(qrPayload);
+    if (!currentUser?.uid) {
+      console.warn("No current user UID available for QR generation");
+      return makeQrString('no-uid', 'Unknown User', '@unknown');
+    }
+    
+    console.log("Generating QR for user:", currentUser.uid);
+    return makeQrString(
+      userData.uid,
+      userData.name,
+      userData.username
+    );
   };
 
   return (

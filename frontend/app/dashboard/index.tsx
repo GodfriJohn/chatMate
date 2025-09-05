@@ -1,3 +1,4 @@
+// dashboard/index.tsx - Enhanced version
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -10,11 +11,12 @@ import {
   SafeAreaView,
   Modal,
   TextInput,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { auth } from '../../src/api/firebase';
-import { listenForMyChats } from '../../src/api/chatService';
+import { listenForMyChats, syncPendingData } from '../../src/api/chatService';
 import BottomNavigation from '../../components/BottomNavigation';
 
 const ChatInterface = () => {
@@ -28,27 +30,47 @@ const ChatInterface = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [chats, setChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   const currentUser = auth.currentUser;
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.warn("⚠️ No authenticated user found");
+      setLoading(false);
+      return;
+    }
 
+    console.log("🚀 Setting up chat listener for user:", currentUser.uid);
+
+    // Set up the enhanced listener that handles offline-first loading
     const unsubscribe = listenForMyChats((firebaseChats) => {
+      console.log("📱 Received chats update:", firebaseChats.length, "chats");
+      
       const transformedChats = firebaseChats.map((chat) => {
         const otherParticipant = chat.participants?.find((uid: string) => uid !== currentUser.uid);
         let timeString = '';
+        
         if (chat.lastMessage?.createdAt) {
           const lastMessageTime = chat.lastMessage.createdAt.toDate();
           const now = new Date();
           const diffMs = now.getTime() - lastMessageTime.getTime();
           const diffHours = diffMs / (1000 * 60 * 60);
+          
           if (diffHours < 24) {
-            timeString = lastMessageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            timeString = lastMessageTime.toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            });
           } else {
-            timeString = lastMessageTime.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            timeString = lastMessageTime.toLocaleDateString([], { 
+              month: 'short', 
+              day: 'numeric' 
+            });
           }
         }
+        
         return {
           id: chat.id,
           name: otherParticipant || 'Unknown User',
@@ -62,12 +84,42 @@ const ChatInterface = () => {
           participants: chat.participants,
         };
       });
+      
       setChats(transformedChats);
       setLoading(false);
+      setIsRefreshing(false);
+      
+      // Check if we're in offline mode (no real-time updates)
+      setIsOffline(firebaseChats.length === 0 && transformedChats.length > 0);
     });
+
+    // Trigger background sync on app start
+    syncPendingData().catch(err => 
+      console.error("❌ Initial sync failed:", err)
+    );
 
     return unsubscribe;
   }, [currentUser]);
+
+  const handleRefresh = async () => {
+    if (!currentUser) return;
+    
+    console.log("🔄 Manual refresh triggered");
+    setIsRefreshing(true);
+    
+    try {
+      // Trigger background sync
+      await syncPendingData();
+      
+      // The listener will automatically update the UI when sync completes
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 1000);
+    } catch (err) {
+      console.error("❌ Refresh failed:", err);
+      setIsRefreshing(false);
+    }
+  };
 
   const getInitials = (name: string) => name.split(' ').map(word => word.charAt(0).toUpperCase()).join('').substring(0, 2);
   const getAvatarColor = (name: string) => {
@@ -75,7 +127,11 @@ const ChatInterface = () => {
     return colors[name.length % colors.length];
   };
 
-  const filteredChats = chats.filter(chat => chat.name.toLowerCase().includes(searchQuery.toLowerCase()) || chat.message.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredChats = chats.filter(chat => 
+    chat.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    chat.message.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  
   const getFilteredChats = () => {
     if (activeFilter === 'unread') return chats.filter(chat => chat.hasNotification && chat.unreadCount > 0);
     if (activeFilter === 'favourite') return chats.filter(chat => ['Angel Curtis', 'Kelas Malam', 'Chance Rhiel Madsen'].includes(chat.name));
@@ -86,7 +142,11 @@ const ChatInterface = () => {
   const displayChats = isFilterActive ? getFilteredChats() : (isSearchActive ? filteredChats : chats);
 
   const ChatAvatar = ({ avatar, name }: { avatar: string | null, name: string }) => (
-    avatar ? <Image source={{ uri: avatar }} style={styles.chatAvatar} /> : <View style={[styles.chatAvatar, styles.avatarFallback, { backgroundColor: getAvatarColor(name) }]}><Text style={styles.avatarInitials}>{getInitials(name)}</Text></View>
+    avatar ? 
+      <Image source={{ uri: avatar }} style={styles.chatAvatar} /> : 
+      <View style={[styles.chatAvatar, styles.avatarFallback, { backgroundColor: getAvatarColor(name) }]}>
+        <Text style={styles.avatarInitials}>{getInitials(name)}</Text>
+      </View>
   );
 
   const handleSearchPress = () => {
@@ -100,10 +160,24 @@ const ChatInterface = () => {
 
   const handleChatPress = (chat: any) => {
     if (isSelectMode) {
-      setSelectedChats(selectedChats.includes(chat.id) ? selectedChats.filter(id => id !== chat.id) : [...selectedChats, chat.id]);
+      setSelectedChats(selectedChats.includes(chat.id) ? 
+        selectedChats.filter(id => id !== chat.id) : 
+        [...selectedChats, chat.id]
+      );
       return;
     }
-    router.push({ pathname: '/chat/[id]', params: { id: chat.id, chatName: chat.name, chatAvatar: chat.avatar || '', hasNotification: chat.hasNotification, unreadCount: chat.unreadCount } });
+    
+    console.log("🗨️ Opening chat:", chat.id);
+    router.push({ 
+      pathname: '/chat/[id]', 
+      params: { 
+        id: chat.id, 
+        chatName: chat.name, 
+        chatAvatar: chat.avatar || '', 
+        hasNotification: chat.hasNotification, 
+        unreadCount: chat.unreadCount 
+      } 
+    });
   };
 
   return (
@@ -136,7 +210,15 @@ const ChatInterface = () => {
             </View>
           ) : (
             <>
-              <Text style={styles.headerTitle}>ChatMate</Text>
+              <View style={styles.headerTitleContainer}>
+                <Text style={styles.headerTitle}>ChatMate</Text>
+                {isOffline && (
+                  <View style={styles.offlineIndicator}>
+                    <Ionicons name="cloud-offline-outline" size={16} color="#FF9500" />
+                    <Text style={styles.offlineText}>Offline</Text>
+                  </View>
+                )}
+              </View>
               <TouchableOpacity style={styles.searchButton} onPress={handleSearchPress}>
                 <Ionicons name="search-outline" size={24} color="#1C1C1E" />
               </TouchableOpacity>
@@ -157,7 +239,18 @@ const ChatInterface = () => {
               </Text>
             </View>
             
-            <ScrollView style={styles.chatsList} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.chatsList} 
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  colors={['#007AFF']}
+                  tintColor="#007AFF"
+                />
+              }
+            >
               {searchQuery.length === 0 ? (
                 <View style={styles.emptySearchState}>
                   <Ionicons name="search-outline" size={80} color="#C7C7CC" />
@@ -188,14 +281,37 @@ const ChatInterface = () => {
           </View>
         ) : (
           /* Normal Mode */
-          <ScrollView style={styles.chatsList} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            style={styles.chatsList} 
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                colors={['#007AFF']}
+                tintColor="#007AFF"
+              />
+            }
+          >
             {loading ? (
-              <View style={styles.loadingContainer}><Text style={styles.loadingText}>Loading chats...</Text></View>
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading chats...</Text>
+              </View>
             ) : chats.length === 0 ? (
               <View style={styles.emptyChatsState}>
                 <Ionicons name="chatbubbles-outline" size={80} color="#C7C7CC" />
                 <Text style={styles.emptyChatsText}>No chats yet</Text>
-                <Text style={styles.emptyChatsSubtext}>Start a conversation by scanning a QR code or adding a contact</Text>
+                <Text style={styles.emptyChatsSubtext}>
+                  Start a conversation by scanning a QR code or adding a contact
+                </Text>
+                {isOffline && (
+                  <View style={styles.offlineMessage}>
+                    <Ionicons name="wifi-outline" size={20} color="#FF9500" />
+                    <Text style={styles.offlineMessageText}>
+                      Connect to internet to sync your chats
+                    </Text>
+                  </View>
+                )}
               </View>
             ) : (
               displayChats.map((chat) => (
@@ -233,7 +349,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, 
     borderBottomColor: '#E5E5EA' 
   },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   headerTitle: { fontSize: 28, fontWeight: '700', color: '#1C1C1E' },
+  offlineIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 12,
+  },
+  offlineText: {
+    fontSize: 12,
+    color: '#FF9500',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
   searchButton: { padding: 8 },
 
   // Search Header Styles
@@ -306,7 +441,13 @@ const styles = StyleSheet.create({
   },
 
   chatsList: { flex: 1 },
-  chatItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 0.5, borderBottomColor: '#E5E5EA' },
+  chatItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 16, 
+    borderBottomWidth: 0.5, 
+    borderBottomColor: '#E5E5EA' 
+  },
   chatAvatar: { width: 52, height: 52, borderRadius: 26, marginRight: 16 },
   chatContent: { flex: 1 },
   chatHeader: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -317,9 +458,39 @@ const styles = StyleSheet.create({
   avatarInitials: { fontSize: 18, fontWeight: '600', color: '#FFFFFF' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontSize: 16, color: '#8E8E93' },
-  emptyChatsState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  emptyChatsText: { fontSize: 20, fontWeight: '600', color: '#1C1C1E', marginTop: 16 },
-  emptyChatsSubtext: { fontSize: 16, color: '#8E8E93', textAlign: 'center', marginTop: 8 },
+  emptyChatsState: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 40 
+  },
+  emptyChatsText: { 
+    fontSize: 20, 
+    fontWeight: '600', 
+    color: '#1C1C1E', 
+    marginTop: 16 
+  },
+  emptyChatsSubtext: { 
+    fontSize: 16, 
+    color: '#8E8E93', 
+    textAlign: 'center', 
+    marginTop: 8 
+  },
+  offlineMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 8,
+  },
+  offlineMessageText: {
+    fontSize: 14,
+    color: '#FF9500',
+    marginLeft: 8,
+    textAlign: 'center',
+  },
 });
 
 export default ChatInterface;

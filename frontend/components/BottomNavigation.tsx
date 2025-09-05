@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { useRouter, usePathname } from 'expo-router';
 import { auth } from '../src/api/firebase';
+import { makeQrString } from '../src/utils/qr'; // Use standardized QR utility
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
@@ -43,13 +44,13 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Get current user data
   useEffect(() => {
-    console.log("🔄 BottomNavigation: Getting current user");
+    console.log("BottomNavigation: Getting current user");
     const user = auth.currentUser;
     if (user) {
-      console.log("✅ Current user found in BottomNav:", user.uid);
+      console.log("Current user found in BottomNav:", user.uid);
       setCurrentUser(user);
     } else {
-      console.warn("⚠️ No current user found in BottomNav");
+      console.warn("No current user found in BottomNav");
     }
   }, []);
 
@@ -62,7 +63,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
     avatar: currentUser?.photoURL || null,
   };
 
-  console.log("🔍 BottomNav user data:", userData);
+  console.log("BottomNav user data:", userData);
 
   // Helper function to get initials
   const getInitials = (name: string) => {
@@ -85,19 +86,19 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Handle home button press
   const handleHomePress = () => {
-    console.log("🏠 Home button pressed");
+    console.log("Home button pressed");
     router.push('/dashboard');
   };
 
   // Handle profile button press
   const handleProfilePress = () => {
-    console.log("👤 Profile button pressed");
+    console.log("Profile button pressed");
     router.push('/profile');
   };
 
   // Handle new chat button press - show modal
   const handleNewChatPress = () => {
-    console.log("💬 New chat button pressed");
+    console.log("New chat button pressed");
     setModalVisible(true);
     Animated.timing(slideAnim, {
       toValue: 0,
@@ -108,7 +109,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Close main modal
   const closeModal = () => {
-    console.log("❌ Closing main modal");
+    console.log("Closing main modal");
     Animated.timing(slideAnim, {
       toValue: screenHeight,
       duration: 250,
@@ -120,7 +121,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Show contact modal
   const showContactModal = () => {
-    console.log("👥 Showing contact modal");
+    console.log("Showing contact modal");
     setContactModalVisible(true);
     Animated.timing(contactSlideAnim, {
       toValue: 0,
@@ -131,7 +132,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Close contact modal
   const closeContactModal = () => {
-    console.log("❌ Closing contact modal");
+    console.log("Closing contact modal");
     Animated.timing(contactSlideAnim, {
       toValue: screenHeight,
       duration: 250,
@@ -143,7 +144,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Show QR modal
   const showQrModal = () => {
-    console.log("📱 Showing QR modal");
+    console.log("Showing QR modal");
     setQrModalVisible(true);
     Animated.spring(qrScaleAnim, {
       toValue: 1,
@@ -155,7 +156,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Close QR modal
   const closeQrModal = () => {
-    console.log("❌ Closing QR modal");
+    console.log("Closing QR modal");
     Animated.timing(qrScaleAnim, {
       toValue: 0,
       duration: 200,
@@ -167,7 +168,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Handle new chat navigation
   const handleNewChatNavigation = () => {
-    console.log("➡️ Navigating to contacts");
+    console.log("Navigating to contacts");
     closeModal();
     setTimeout(() => {
       router.push('/contacts');
@@ -176,7 +177,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Handle new contact navigation - show contact options modal
   const handleNewContactNavigation = () => {
-    console.log("👥 Opening new contact options");
+    console.log("Opening new contact options");
     closeModal();
     setTimeout(() => {
       showContactModal();
@@ -185,7 +186,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Handle QR scan option - show QR modal
   const handleQRScan = () => {
-    console.log("📷 QR scan option selected");
+    console.log("QR scan option selected");
     closeContactModal();
     setTimeout(() => {
       showQrModal();
@@ -194,7 +195,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Handle actual QR scanning
   const handleStartQRScan = () => {
-    console.log("🎯 Starting QR scan");
+    console.log("Starting QR scan");
     closeQrModal();
     setTimeout(() => {
       router.push('/qr-scanner');
@@ -203,7 +204,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   // Handle phone number entry - Open native contacts app directly
   const handlePhoneNumberEntry = async () => {
-    console.log("📞 Phone number entry selected");
+    console.log("Phone number entry selected");
     closeContactModal();
     
     try {
@@ -217,20 +218,20 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
           try {
             const canOpen = await Linking.canOpenURL(url);
             if (canOpen) {
-              console.log(`✅ Opening ${url}`);
+              console.log(`Opening ${url}`);
               await Linking.openURL(url);
               return;
             }
           } catch (error) {
-            console.log(`❌ Failed to open ${url}:`, error);
+            console.log(`Failed to open ${url}:`, error);
           }
         }
         
         try {
-          console.log("📱 Fallback to phone app");
+          console.log("Fallback to phone app");
           await Linking.openURL('tel:');
         } catch (error) {
-          console.log('❌ Failed to open Phone app:', error);
+          console.log('Failed to open Phone app:', error);
         }
         
       } else if (Platform.OS === 'android') {
@@ -244,41 +245,44 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
           try {
             const canOpen = await Linking.canOpenURL(url);
             if (canOpen) {
-              console.log(`✅ Opening ${url}`);
+              console.log(`Opening ${url}`);
               await Linking.openURL(url);
               return;
             }
           } catch (error) {
-            console.log(`❌ Failed to open ${url}:`, error);
+            console.log(`Failed to open ${url}:`, error);
           }
         }
       }
       
     } catch (error) {
-      console.error('❌ Error opening contacts app:', error);
+      console.error('Error opening contacts app:', error);
     }
   };
 
   // Handle new community navigation
   const handleNewCommunityNavigation = () => {
-    console.log("🏘️ New community navigation");
+    console.log("New community navigation");
     closeModal();
     setTimeout(() => {
       router.push('/add-community');
     }, 100);
   };
 
-  // Generate QR payload with unique user data
+  // Generate QR payload using standardized utility
   const generateQRPayload = () => {
-  const qrPayload = {
-    uid: userData.uid,  // 🔑 comes from Firebase auth.currentUser
-    name: userData.name,
-    username: userData.username,
-    timestamp: Date.now(),
+    if (!currentUser?.uid) {
+      console.warn("No current user UID available for QR generation");
+      return makeQrString('no-uid', 'Unknown User', '@unknown');
+    }
+    
+    console.log("Generating QR for user:", currentUser.uid);
+    return makeQrString(
+      userData.uid,
+      userData.name,
+      userData.username
+    );
   };
-  return JSON.stringify(qrPayload);
-};
-
 
   // Determine active tab based on current route
   const isHomeActive = pathname === '/dashboard' || pathname === '/dashboard/';
@@ -471,12 +475,11 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
                 <View style={styles.qrDisplayContainer}>
                   <View style={styles.qrFrame}>
                     <QRCode
-  value={generateQRPayload()}   // this includes uid, name, username, etc.
-  size={160}
-  backgroundColor="#FFFFFF"
-  color="#000000"
-/>
-
+                      value={generateQRPayload()}
+                      size={160}
+                      backgroundColor="#FFFFFF"
+                      color="#000000"
+                    />
                   </View>
                   
                   {/* User Info */}

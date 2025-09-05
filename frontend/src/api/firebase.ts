@@ -1,10 +1,10 @@
 // src/api/firebase.ts
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { initializeAuth, getReactNativePersistence } from "firebase/auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { initializeFirestore } from "firebase/firestore";
 
 // ⬇️ Replace with the Web app config from Firebase Console (Project settings → Your apps → Web)
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyAcgAawm3bL1zokTeCGBVqUdOt-gcpFPu8",
   authDomain: "exchat-83d02.firebaseapp.com",
@@ -15,13 +15,16 @@ const firebaseConfig = {
   measurementId: "G-9E4PDNGF5E"
 };
 
+// Initialize Firebase app
 const app = initializeApp(firebaseConfig);
 
-// Auth instance
-export const auth = getAuth(app);
+// ✅ Auth instance with persistence (keeps UID stable across restarts & offline)
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage),
+});
 
-// Firestore instance
-// Auto-detect long-polling helps React Native environments avoid connectivity quirks
+// ✅ Firestore instance
+// Long-polling helps avoid React Native networking issues (esp. on Android/emulators)
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
 });
