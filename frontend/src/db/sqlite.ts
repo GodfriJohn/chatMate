@@ -41,20 +41,24 @@ export async function initSQLite() {
     ON messages(chatId, createdAt DESC)
   `);
 
-  // 🆕 Chats table for offline persistence
+  // Chats table (existing)
   await exec(`
-    CREATE TABLE IF NOT EXISTS chats (
-      id TEXT PRIMARY KEY,
-      pairKey TEXT NOT NULL UNIQUE,
-      participants TEXT NOT NULL,
-      createdAt INTEGER,
-      lastUpdated INTEGER,
-      lastMessageText TEXT,
-      lastMessageFrom TEXT,
-      lastMessageCreatedAt INTEGER,
-      syncStatus TEXT DEFAULT 'synced' CHECK (syncStatus IN ('synced', 'pending', 'failed'))
-    )
-  `);
+  CREATE TABLE IF NOT EXISTS chats (
+    id TEXT PRIMARY KEY,
+    pairKey TEXT,
+    participants TEXT,
+    createdAt INTEGER,
+    lastUpdated INTEGER,
+    lastMessageText TEXT,
+    lastMessageFrom TEXT,
+    lastMessageCreatedAt INTEGER,
+    syncStatus TEXT,
+    peerUsername TEXT,
+    peerDisplayName TEXT
+  )
+`);
+
+
 
   await exec(`
     CREATE INDEX IF NOT EXISTS idx_chats_lastUpdated 
@@ -64,5 +68,52 @@ export async function initSQLite() {
   await exec(`
     CREATE INDEX IF NOT EXISTS idx_chats_pairKey 
     ON chats(pairKey)
+  `);
+
+  // 🆕 Users table for profile management
+  await exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      uid TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      displayName TEXT,
+      phone TEXT,
+      email TEXT,
+      photoURL TEXT,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    )
+  `);
+
+  await exec(`
+    CREATE INDEX IF NOT EXISTS idx_users_username 
+    ON users(username)
+  `);
+
+  await exec(`
+    CREATE INDEX IF NOT EXISTS idx_users_updated 
+    ON users(updatedAt DESC)
+  `);
+
+  // 🆕 Contacts table to store known users with their names
+  await exec(`
+    CREATE TABLE IF NOT EXISTS contacts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT NOT NULL,
+      contactUid TEXT NOT NULL,
+      contactUsername TEXT,
+      contactDisplayName TEXT,
+      addedAt INTEGER NOT NULL,
+      UNIQUE(uid, contactUid)
+    )
+  `);
+
+  await exec(`
+    CREATE INDEX IF NOT EXISTS idx_contacts_uid 
+    ON contacts(uid)
+  `);
+
+  await exec(`
+    CREATE INDEX IF NOT EXISTS idx_contacts_contact_uid 
+    ON contacts(contactUid)
   `);
 }

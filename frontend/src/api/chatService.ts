@@ -28,8 +28,17 @@ import {
   markMessageSent,
   markMessageFailed,
   getMessagesByChatId,
-  getPendingMessages,   // ✅ added
+  getPendingMessages,
 } from '../db/messageRepo';
+import {
+  addContact,
+  getContact,
+  updateContact,
+} from '../db/contactRepo';
+import {
+  getUserProfile,
+  saveUserProfile,
+} from '../db/userRepo';
 import { v4 as uuidv4 } from 'uuid';
 
 const db = getFirestore();
@@ -42,24 +51,53 @@ const chatCreationCache = new Map<string, Promise<string>>();
 
 // ---------------------- Chat creation ----------------------
 
-export async function createOrGetChat(peerUid: string): Promise<string> {
+export async function createOrGetChat(
+  peerUid: string,
+  peerUsername?: string,
+  peerDisplayName?: string
+): Promise<string> {
   const me = auth.currentUser?.uid;
+  console.log("👤 createOrGetChat currentUser:", me);
   if (!me) throw new Error('Not signed in');
   if (me === peerUid) throw new Error('Cannot chat with yourself');
 
   const key = pairKeyOf(me, peerUid);
   console.log('Chat pair key:', key);
 
+  // Save peer as contact if provided
+  if (peerUsername || peerDisplayName) {
+    try {
+      const existingContact = await getContact(me, peerUid);
+      if (!existingContact) {
+        await addContact({
+          uid: me,
+          contactUid: peerUid,
+          contactUsername: peerUsername,
+          contactDisplayName: peerDisplayName,
+        });
+        console.log('✅ Added contact:', peerUsername || peerDisplayName);
+      } else {
+        await updateContact(me, peerUid, {
+          contactUsername: peerUsername || existingContact.contactUsername,
+          contactDisplayName: peerDisplayName || existingContact.contactDisplayName,
+        });
+        console.log('✅ Updated contact info');
+      }
+    } catch (error) {
+      console.error('Failed to save contact:', error);
+    }
+  }
+
   // Check SQLite first
   const localChat = await getChatByPairKey(key);
   if (localChat) {
-    console.log('Found chat in SQLite:', localChat.id);
+    console.log('📂 Found chat in SQLite:', localChat.id);
     syncChatWithServer(localChat); // non-blocking
     return localChat.id;
   }
 
   if (chatCreationCache.has(key)) {
-    console.log('Chat creation already in progress, waiting...');
+    console.log('⏳ Chat creation already in progress, waiting...');
     return await chatCreationCache.get(key)!;
   }
 
@@ -82,6 +120,8 @@ async function createOrGetChatInternal(key: string, me: string, peerUid: string)
       const existingChat = snap.docs[0];
       const chatData = existingChat.data();
 
+      console.log("📂 Found existing Firestore chat:", existingChat.id);
+
       await saveChat({
         id: existingChat.id,
         pairKey: key,
@@ -97,7 +137,9 @@ async function createOrGetChatInternal(key: string, me: string, peerUid: string)
       return existingChat.id;
     }
 
-    // Create new chat in Firestore
+    // 🔥 Patch: add stronger logs before creation
+    console.log("🔥 Creating chat in Firestore:", { key, me, peerUid });
+
     const docRef = await addDoc(chatsCol, {
       pairKey: key,
       participants: [me, peerUid],
@@ -105,6 +147,8 @@ async function createOrGetChatInternal(key: string, me: string, peerUid: string)
       lastUpdated: serverTimestamp(),
       lastMessage: null,
     });
+
+    console.log("✅ Chat doc created with ID:", docRef.id);
 
     await saveChat({
       id: docRef.id,
@@ -117,7 +161,7 @@ async function createOrGetChatInternal(key: string, me: string, peerUid: string)
 
     return docRef.id;
   } catch (error) {
-    console.error('Failed to create chat online, creating offline:', error);
+    console.error('❌ Failed to create chat online, creating offline:', error);
 
     const offlineChatId = uuidv4();
     await saveChat({
@@ -137,6 +181,7 @@ async function createOrGetChatInternal(key: string, me: string, peerUid: string)
 
 export async function sendMessage(chatId: string, text: string) {
   const me = auth.currentUser?.uid;
+  console.log("✉️ sendMessage currentUser:", me);
   if (!me) return;
 
   const clientId = uuidv4();
@@ -170,9 +215,9 @@ export async function sendMessage(chatId: string, text: string) {
     await markMessageSent(clientId, docRef.id);
     await updateChatLastMessage(chatId, text, me, createdAtLocal);
 
-    console.log('Message sent successfully');
+    console.log('✅ Message sent successfully');
   } catch (err) {
-    console.error('Firestore sendMessage failed:', err);
+    console.error('❌ Firestore sendMessage failed:', err);
     await markMessageFailed(clientId);
     await updateChatLastMessage(chatId, text, me, createdAtLocal);
   }
@@ -258,30 +303,59 @@ export function listenForMyChats(onUpdate: (chats: any[]) => void) {
 async function loadChatsFromSQLite(me: string, onUpdate: (chats: any[]) => void) {
   try {
     const sqliteChats = await getAllChats(me);
-    const transformed = sqliteChats.map((chat) => ({
-      id: chat.id,
-      pairKey: chat.pairKey,
-      participants: JSON.parse(chat.participants),
-      createdAt: {
-        toMillis: () => chat.createdAt,
-        toDate: () => new Date(chat.createdAt),
-      },
-      lastUpdated: {
-        toMillis: () => chat.lastUpdated,
-        toDate: () => new Date(chat.lastUpdated),
-      },
-      lastMessage: chat.lastMessageText
-        ? {
-            text: chat.lastMessageText,
-            from: chat.lastMessageFrom,
-            createdAt: {
-              toMillis: () => chat.lastMessageCreatedAt || 0,
-              toDate: () => new Date(chat.lastMessageCreatedAt || 0),
-            },
+    const transformedChats = [];
+
+    for (const chat of sqliteChats) {
+      const participants = JSON.parse(chat.participants);
+      const otherParticipant = participants.find((uid: string) => uid !== me);
+
+      let participantName = otherParticipant;
+
+      if (otherParticipant) {
+        const contact = await getContact(me, otherParticipant);
+        if (contact?.contactDisplayName) {
+          participantName = contact.contactDisplayName;
+        } else if (contact?.contactUsername) {
+          participantName = contact.contactUsername;
+        } else {
+          const userProfile = await getUserProfile(otherParticipant);
+          if (userProfile?.displayName) {
+            participantName = userProfile.displayName;
+          } else if (userProfile?.username) {
+            participantName = userProfile.username;
+          } else {
+            participantName = `User ${otherParticipant.slice(-4)}`;
           }
-        : null,
-    }));
-    onUpdate(transformed);
+        }
+      }
+
+      transformedChats.push({
+        id: chat.id,
+        pairKey: chat.pairKey,
+        participants: participants,
+        participantName,
+        createdAt: {
+          toMillis: () => chat.createdAt,
+          toDate: () => new Date(chat.createdAt),
+        },
+        lastUpdated: {
+          toMillis: () => chat.lastUpdated,
+          toDate: () => new Date(chat.lastUpdated),
+        },
+        lastMessage: chat.lastMessageText
+          ? {
+              text: chat.lastMessageText,
+              from: chat.lastMessageFrom,
+              createdAt: {
+                toMillis: () => chat.lastMessageCreatedAt || 0,
+                toDate: () => new Date(chat.lastMessageCreatedAt || 0),
+              },
+            }
+          : null,
+      });
+    }
+
+    onUpdate(transformedChats);
   } catch {
     onUpdate([]);
   }

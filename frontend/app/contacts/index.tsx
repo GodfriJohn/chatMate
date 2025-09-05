@@ -1,6 +1,6 @@
 import QRCode from 'react-native-qrcode-svg';
 import { auth } from '../../src/api/firebase';
-import { makeQrString } from '../../src/utils/qr'; // Use standardized QR utility
+import { buildQrPayload, encodeQrPayload } from '../../src/utils/qr'; // Use standardized QR utility
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -233,18 +233,21 @@ const ContactsScreen = () => {
 
   // Generate QR payload using standardized utility
   const generateQRPayload = () => {
-    if (!currentUser?.uid) {
-      console.warn("No current user UID available for QR generation");
-      return makeQrString('no-uid', 'Unknown User', '@unknown');
-    }
-    
-    console.log("Generating QR for user:", currentUser.uid);
-    return makeQrString(
-      userData.uid,
-      userData.name,
-      userData.username
-    );
-  };
+  if (!currentUser?.uid) {
+    console.warn("No current user UID available for QR generation");
+    return encodeQrPayload(buildQrPayload({ uid: "no-uid", username: "guest" }));
+  }
+
+  console.log("Generating QR for user:", currentUser.uid, "username:", userData.username);
+
+  return encodeQrPayload(
+    buildQrPayload({
+      uid: userData.uid,
+      username: userData.username,
+      name: userData.displayName,
+    })
+  );
+};
 
   return (
     <>
