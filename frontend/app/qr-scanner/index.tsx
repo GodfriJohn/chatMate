@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { auth } from '../../src/api/firebase';
+import { createChat } from '../../src/api/chatService';
 import {
   View,
   Text,
@@ -8,7 +10,6 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
-import { Camera } from 'expo-camera';
 import { BarCodeScanner } from 'expo-barcode-scanner';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -23,55 +24,30 @@ const QRScannerScreen = () => {
       const { status } = await BarCodeScanner.requestPermissionsAsync();
       setHasPermission(status === 'granted');
     };
-
     getBarCodeScannerPermissions();
   }, []);
 
-  const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
+  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
     setScanned(true);
-    
     try {
-      // Try to parse the QR data as JSON (for contact info)
-      const contactData = JSON.parse(data);
-      
-      if (contactData.name && contactData.phone) {
-        Alert.alert(
-          'Contact Found',
-          `Add ${contactData.name} (${contactData.phone}) to your contacts?`,
-          [
-            { 
-              text: 'Cancel', 
-              style: 'cancel',
-              onPress: () => setScanned(false)
-            },
-            { 
-              text: 'Add Contact', 
-              onPress: () => {
-                console.log('Adding contact:', contactData);
-                router.back();
-              }
-            }
-          ]
-        );
+      const parsed = JSON.parse(data);
+
+      if (parsed.uid) {
+        const me = auth.currentUser?.uid;
+        if (!me) throw new Error('Not logged in');
+        if (parsed.uid === me) throw new Error('You scanned your own QR');
+
+        const chatId = await createChat(me, parsed.uid);
+
+        Alert.alert('Connected!', 'Chat created successfully', [
+          { text: 'OK', onPress: () => router.replace(`/chat/${chatId}`) },
+        ]);
       } else {
-        throw new Error('Invalid contact data');
+        throw new Error('Invalid QR format');
       }
-    } catch (error) {
-      // If not valid JSON or contact data, show the raw data
-      Alert.alert(
-        'QR Code Scanned',
-        `Data: ${data}`,
-        [
-          { 
-            text: 'Scan Again', 
-            onPress: () => setScanned(false)
-          },
-          { 
-            text: 'Done', 
-            onPress: () => router.back()
-          }
-        ]
-      );
+    } catch (err: any) {
+      Alert.alert('Scan failed', err.message ?? 'Invalid QR code');
+      setScanned(false);
     }
   };
 
@@ -101,7 +77,7 @@ const QRScannerScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#000000" />
-      
+
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
         <View style={styles.header}>
@@ -112,19 +88,17 @@ const QRScannerScreen = () => {
           <View style={styles.headerRight} />
         </View>
 
-        {/* Camera View */}
+        {/* QR Scanner */}
         <View style={styles.cameraContainer}>
           <BarCodeScanner
             onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
             style={styles.camera}
           />
-          
+
           {/* Overlay */}
           <View style={styles.overlay}>
-            {/* Top overlay */}
             <View style={styles.overlayTop} />
-            
-            {/* Middle section with scanning frame */}
+
             <View style={styles.overlayMiddle}>
               <View style={styles.overlaySide} />
               <View style={styles.scanningFrame}>
@@ -135,14 +109,13 @@ const QRScannerScreen = () => {
               </View>
               <View style={styles.overlaySide} />
             </View>
-            
-            {/* Bottom overlay */}
+
             <View style={styles.overlayBottom}>
               <Text style={styles.instructionText}>
                 Position the QR code within the frame
               </Text>
               {scanned && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.scanAgainButton}
                   onPress={() => setScanned(false)}
                 >
@@ -208,7 +181,7 @@ const styles = StyleSheet.create({
     width: 44,
   },
 
-  // Camera
+  // Scanner
   cameraContainer: {
     flex: 1,
     position: 'relative',
@@ -250,39 +223,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
 
-  // Corner indicators
+  // Corners
   corner: {
     position: 'absolute',
     width: 30,
     height: 30,
     borderColor: '#FFFFFF',
   },
-  topLeft: {
-    top: 0,
-    left: 0,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-  },
-  topRight: {
-    top: 0,
-    right: 0,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
-  },
-  bottomLeft: {
-    bottom: 0,
-    left: 0,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
-  },
-  bottomRight: {
-    bottom: 0,
-    right: 0,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
-  },
+  topLeft: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 },
+  topRight: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 },
+  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3 },
+  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3 },
 
-  // Instructions
   instructionText: {
     fontSize: 16,
     color: '#FFFFFF',

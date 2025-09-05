@@ -1,3 +1,5 @@
+import QRCode from 'react-native-qrcode-svg';
+import { auth } from '../../src/api/firebase';
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -106,12 +108,7 @@ const ContactsScreen = () => {
     username: '@johndoe',
     phone: '+1 (555) 123-4567',
     avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-    qrCode: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(JSON.stringify({
-      name: 'John Doe',
-      phone: '+1 (555) 123-4567',
-      username: '@johndoe',
-      app: 'eX-Chat'
-    }))}&bgcolor=FFFFFF&color=000000&qzone=1&format=png`,
+    
   };
 
   // Helper function to get initials
@@ -529,12 +526,10 @@ const ContactsScreen = () => {
                 {/* QR Code Display */}
                 <View style={styles.qrDisplayContainer}>
                   <View style={styles.qrFrame}>
-                    <Image 
-                      source={{ uri: userData.qrCode }}
-                      style={styles.qrCodeImage}
-                      resizeMode="contain"
-                      onError={() => console.log('QR Code loading failed')}
-                    />
+                    <QRCode
+  value={JSON.stringify({ uid: auth.currentUser?.uid })}
+  size={160}
+/>
                   </View>
                   
                   {/* User Info */}
